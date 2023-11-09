@@ -537,7 +537,6 @@ async function main() {
         if (firstExp) {
             const firstClient = await obtenerRegistroClientes(conexion, firstExp.id_client);
 
-            var urlPage = process.env.URL_PAGE || 'https://temisperu.com';
             // var dataUpdateReport = [];
     
             // if (responseData.data['Reporte de expediente']['Juez'] != firstExp.juez){
@@ -576,6 +575,7 @@ async function main() {
             }
 
             var recipients = [];
+            var urlPage = "https://" + firstExp.code_company + ".temisperu.com";
 
             for (const row of resultEmails) {
                 recipients.push(row.email);

@@ -277,7 +277,7 @@ async function main() {
         if (firstExp) {
             const firstClient = await obtenerRegistroClientes(conexion, firstExp.id_client);
 
-            var urlPage = process.env.URL_PAGE || 'https://temisperu.com';
+            var urlPage = "https://" + firstExp.code_company + ".temisperu.com";
 
             await actualizarRegistroExpedientes(conexion, responseData, firstExp);
             // VISTA CAUSAS DEL EXPEDIENTE

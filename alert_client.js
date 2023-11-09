@@ -132,8 +132,6 @@ async function main() {
 
                 const firstClient = await obtenerRegistroClientes(conexion, element.id_client);
 
-                var urlPage = process.env.URL_PAGE || 'https://temisperu.com';
-
                 const resultEmails = await obtenerUserParte(conexion, element.code_user, element.code_company);
                 console.log('resultEmails: ', resultEmails);
                 if (!resultEmails){

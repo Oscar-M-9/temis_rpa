@@ -124,7 +124,7 @@ async function main() {
 
                 const firstClient = await obtenerRegistroClientes(conexion, firstExp.id_client);
 
-                var urlPage = process.env.URL_PAGE || 'https://temisperu.com';
+                var urlPage = "https://" + firstExp.code_company + ".temisperu.com";
 
                 const resultEmails = await obtenerUserParte(conexion, firstExp.id);
                 console.log('resultEmails: ', resultEmails);

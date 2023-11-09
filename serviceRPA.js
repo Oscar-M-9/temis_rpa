@@ -20,12 +20,18 @@ const ac = require("@antiadmin/anticaptchaofficial");
 // const secretKey = require("./settings/keys");
 if (process.env.NODE_ENV != 'production'){
     require('dotenv').config();
+    const httpsOptions = {
+        key: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.key', 'utf8'),
+        cert: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.crt', 'utf8'),
+        ca: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.pem', 'utf8')
+    };
+}else{
+    const httpsOptions = {
+        key: fs.readFileSync(process.env.DATA_KEY),
+        cert: fs.readFileSync(process.env.DATA_CERT)
+    };
 }
 
-const httpsOptions = {
-    key: fs.readFileSync(process.env.DATA_KEY),
-    cert: fs.readFileSync(process.env.DATA_CERT)
-};
 
 
 
@@ -46,25 +52,11 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 
-// Middleware para verificar JWT
-// function verificarJWT(req, res, next) {
-//     const token = req.headers['authorization'];
-  
-//     if (!token) {
-//         return res.status(401).json({ mensaje: 'Token no proporcionado' });
-//     }
-  
-//     jwt.verify(token, secretKey.key, (err, decoded) => {
-//         if (err) {
-//             return res.status(403).json({ mensaje: 'Token no válido' });
-//         }
-//         // Si el token es válido, puedes continuar con el siguiente middleware o la lógica del endpoint.
-//         next();
-//     });
-// }
-
-const dirGeneral = 'D:/INGYTAL/ABOGADOS/abogados/storage/app/public/docs/';
-// const dirGeneral = '/home/ingytal/public_html/temis.ingytal.com/storage/app/public/docs/';
+if (process.env.NODE_ENV != 'production'){
+    const dirGeneral = 'D:/INGYTAL/ABOGADOS/abogados/storage/app/public/docs/';
+}else{
+    const dirGeneral = '/home/temisperu/public_html/_wildcard_.temisperu.com/storage/app/public/docs/';
+}
 
 app.post("/poder-judicial-result", (req, res) => {
     let body_filtros = req.body;
@@ -1253,8 +1245,8 @@ app.post("/supremo-result", (req, res) => {
     
             browser = await puppeteer.launch({
                 args: ["--no-sandbox", "--disable-setuid-sandbox"],
-                headless: false
-                //headless: 'new'
+                // headless: false
+                headless: 'new'
             }); 
             
             const page = await browser.newPage();
@@ -1451,7 +1443,7 @@ app.post("/supremo-result", (req, res) => {
                 text = await ac.solveImage(captcha, true);
             }catch(e){
                 results.status = 404;
-                results.msg = 'No se puedo resolver captcha: ' + e;
+                results.msg = 'No se puedo resolver captcha: ' + e ;
                 await browser.close();
                 return results;
             }
@@ -1627,8 +1619,8 @@ app.post("/supremo-data", (req, res) => {
       
             browser = await puppeteer.launch({
                 args: ["--no-sandbox", "--disable-setuid-sandbox"],
-                headless: false
-                //headless: 'new'
+                // headless: false
+                headless: 'new'
             }); 
             
             const page = await browser.newPage();
@@ -1987,8 +1979,8 @@ app.post("/poder-judicial-update-data", (req, res) => {
     
             browser = await puppeteer.launch({
                 args: ["--no-sandbox", "--disable-setuid-sandbox"],
-                headless: false
-                //headless: 'new'
+                // headless: false
+                headless: 'new'
             });
     
             const page = await browser.newPage();
@@ -2395,10 +2387,10 @@ app.get("/", (req, res) => {
     res.send("Hello world");
 });
 
-// const httpsServer = https.createServer(httpsOptions, app);
-// httpsServer.listen(app.get("port"), () => {
-//     console.log('Servidor HTTPS en ejecución en el puerto', app.get("port"));
-// });
-app.listen(app.get("port"), /* "192.30.241.7", */ () => 
-    console.log("app running on port", app.get("port"))
-);
+const httpsServer = https.createServer(httpsOptions, app);
+httpsServer.listen(app.get("port"), () => {
+    console.log('app running on port', app.get("port"));
+});
+// app.listen(app.get("port"), /* "192.30.241.7", */ () => 
+//     console.log("app running on port", app.get("port"))
+// );

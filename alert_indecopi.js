@@ -344,8 +344,6 @@ async function main() {
         if (firstExp) {
             const firstClient = await obtenerRegistroClientes(conexion, firstExp.id_client);
 
-            var urlPage = process.env.URL_PAGE || 'https://temisperu.com';
-
             await actualizarRegistroExpedientes(conexion, responseData, firstExp);
             const countTotalActual = parseInt(firstRecord.update_information) + 1;
             // const countTotalActual = parseInt(firstRecord.update_information) ;
@@ -367,10 +365,13 @@ async function main() {
                 }
 
                 var recipients = [];
+                var urlPage = "https://" + firstExp.code_company + ".temisperu.com";
                 
                 for (const row of resultEmails) {
                     recipients.push(row.email);
                 }
+                
+
                 console.log('recipients: ', recipients);
                 if (Object.keys(responseData.data['Acciones realizadas']).length > 0){
                     var dataAll = await obtenerAccionesNuevas(conexion, firstExp.id, countTotalActual);
