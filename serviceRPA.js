@@ -28,7 +28,7 @@ const httpsOptions = {
     cert: fs.readFileSync('D:/INGYTAL/ABOGADOS/RPA/cert.crt', 'utf8'),
     key: fs.readFileSync('D:/INGYTAL/ABOGADOS/RPA/cert.key', 'utf8'),
 };
-// PRODUCTION 
+// // PRODUCTION 
 // const httpsOptions = {
 //     key: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.key', 'utf8'),
 //     cert: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.crt', 'utf8'),
@@ -365,7 +365,7 @@ app.post("/poder-judicial-result", (req, res) => {
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(500);
+        res.send({'status': 404})
     });
     
 
@@ -778,7 +778,7 @@ app.post("/poder-judicial-data", (req, res) => {
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(500);
+        res.send({'status': 404})
     });
 });
 
@@ -1088,7 +1088,7 @@ app.post("/indecopi-result", (req, res) => {
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(500);
+        res.send({'status': 404})
     });
     
 });
@@ -1196,7 +1196,7 @@ app.post("/indecopi-data", (req, res) => {
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(500);
+        res.send({'status': 404})
     });
 
 });
@@ -1604,7 +1604,7 @@ app.post("/supremo-result", (req, res) => {
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(500);
+        res.send({'status': 404})
     });
 
 });
@@ -1872,15 +1872,910 @@ app.post("/supremo-data", (req, res) => {
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(500);
+        res.send({'status': 404})
     });
 
 });
 
 app.post("/sinoe-result-data", async (req, res) => {
     let body_filtros = req.body;
-    console.log('body_filtros: ', body_filtros);
     
+    const uid = body_filtros.credential;
+
+    // obtener el registro 
+    async function obtenerRegistroCredenciales(conexion , uid) {
+        return new Promise((resolve, reject) => {
+            conexion.query('SELECT * FROM credenciales WHERE uid = ?', [uid], (error, results) => {
+                if (error) {
+                    reject(error);
+                } else if (results.length === 0) {
+                    resolve(null); // No hay registros
+                } else {
+                    resolve(results[0]);
+                }
+            });
+        });
+    }
+
+    const conexion = conectarBaseDeDatos();
+    conexion.connect();
+
+    const firstCredenciales = await obtenerRegistroCredenciales(conexion, uid);
+    conexion.end();
+    console.log(firstCredenciales);
+
+    if (firstCredenciales){
+        // Credenciales
+        const user = firstCredenciales.user; /* "3510" */
+        const password = firstCredenciales.password; /* "41053160martin" */
+
+        // Casilla Electónica
+        const numExpediente = body_filtros.codigoExpediente ; /* "03247-2012-0-1706-JR-CI-06" */
+
+        // Directorio de descarga de documentos (anexos)
+        const baseDir = dirGeneralSinoe +"/"+ firstCredenciales.code_company;
+        const baseItemPath = '../storage/docs/sinoe/'+ firstCredenciales.code_company + "/";
+
+        const url = 'https://casillas.pj.gob.pe/sinoe/login.xhtml';
+
+        // Borrar carpeta de expediente
+        function eliminarCarpeta(ruta){
+            if (fs.existsSync(ruta)) {
+                fs.readdirSync(ruta).forEach((archivo, _) => {
+                    const archivoRuta = path.join(ruta, archivo);
+                    if (fs.lstatSync(archivoRuta).isDirectory()) {
+                    eliminarCarpeta(archivoRuta);
+                    } else {
+                    fs.unlinkSync(archivoRuta);
+                    }
+                });
+                fs.rmdirSync(ruta);
+            }
+        }
+
+        // Retrocede 31 dias incluyendo el día actual
+        function goBackDays({currentDate, numberDays= 31, includeCurrentDate=true}){
+            let part = currentDate.split('/');
+            let day = parseInt(part[0]);
+            let month = parseInt(part[1]);
+            let year = parseInt(part[2]);
+
+            let fecha = new Date(year, month - 1, day);
+
+            if(includeCurrentDate){
+                fecha.setDate(fecha.getDate() - numberDays + 1);
+            }else{
+                fecha.setDate(fecha.getDate() - numberDays);
+            } 
+
+            let nuevoDia = fecha.getDate();
+            let nuevoMesRelativo = fecha.getMonth();  // 0 -11
+            let nuevoYear = fecha.getFullYear();
+
+            return {
+                "newDay": nuevoDia.toString(), 
+                "newMonthRelative": nuevoMesRelativo.toString(), 
+                "newYear": nuevoYear.toString()
+            };
+        }
+
+        // Aumenta N dias
+        function goForwardDays({ currentDate, numberDays = 10, includeCurrentDate = true }) {
+
+            let part = currentDate.split('/');
+            let day = parseInt(part[0]);
+            let month = parseInt(part[1]);
+            let year = parseInt(part[2]);
+
+            let fecha = new Date(year, month - 1, day);
+
+            if (includeCurrentDate) {
+                fecha.setDate(fecha.getDate() + numberDays - 1);
+            } else {
+                fecha.setDate(fecha.getDate() + numberDays);
+            }
+
+            let nuevoDia = fecha.getDate();
+            let nuevoMesRelativo = fecha.getMonth();  // 0 -11
+            let nuevoYear = fecha.getFullYear();
+            
+            return {
+                "newDay": nuevoDia.toString(),
+                "newMonthRelative": (nuevoMesRelativo).toString(), 
+                "newYear": nuevoYear.toString()
+            }; 
+        }
+
+        // Dias transcurridos desde el 1ro. enero
+        function daysElapsedUntilDate(fecha) {
+            
+            const partesFecha = fecha.split('/');
+            const dia = parseInt(partesFecha[0], 10);
+            const mes = parseInt(partesFecha[1], 10) - 1; // 0 - 11
+            const year = parseInt(partesFecha[2], 10);
+        
+            const fechaIngresada = new Date(year, mes, dia);
+            const primeroDeEnero = new Date(year, 0, 1);
+        
+            const diferenciaEnMilisegundos = fechaIngresada - primeroDeEnero;
+            const diasTranscurridos = Math.floor(diferenciaEnMilisegundos / (1000 * 60 * 60 * 24));
+        
+            return diasTranscurridos;
+        }
+
+        // Opten día actual
+        function getCurrentDate() {
+            let hoy = new Date();
+            let dia = hoy.getDate().toString().padStart(2, '0'); 
+            let mes = (hoy.getMonth() + 1).toString().padStart(2, '0'); 
+            let año = hoy.getFullYear();
+            return `${dia}/${mes}/${año}`;
+        }
+
+        // RPA --> calendario fecha inicial 
+        async function interactCalendar({page, newDate, filterFechaInput= 'fechaInicio'}){
+            
+            let results = {'status': null, 'msg':''};
+
+            try { 
+
+                let filterFechaInputSelector;
+                if(filterFechaInput === 'fechaInicio'){
+                    filterFechaInputSelector = '#frmBusqueda\\:filter_fechaInicio_input';
+                }else if(filterFechaInput === 'fechaFinal'){
+                    filterFechaInputSelector = '#frmBusqueda\\:filter_fechaFinal_input';
+                }else{
+                    throw new Error(`Error en la función [interactCalendar()]/ filterFechaInput no válido`);
+                }
+                
+                await page.waitForSelector(filterFechaInputSelector);
+                const fechaInputElement = await page.$(filterFechaInputSelector);
+                await fechaInputElement.click();
+
+                const panelCalenderSelector = '#ui-datepicker-div';
+                await page.waitForSelector(panelCalenderSelector);
+                const calendar = await page.$(panelCalenderSelector);
+                const calendarioVisible = await page.evaluate((calendar) => {
+                    const estilos = window.getComputedStyle(calendar);
+                    return estilos.display === 'block';
+                },calendar);
+
+                if (!calendarioVisible) {  
+                    results.status = 404;
+                    results.msg = `[interactCalendar()] No se puede abrir el panel de calendario ${filterFechaInput}`;
+                    return results;
+                }
+
+                const {newDay, newMonthRelative, newYear} = newDate;
+
+                // Elegir año
+
+                const datepickerYear = '#ui-datepicker-div > div > div > select.ui-datepicker-year';
+                await page.waitForSelector(datepickerYear);
+                const yearsOptions = await page.evaluate((datepickerYear) => {
+                    const select = document.querySelector(datepickerYear);
+                    const options = select.options;
+                    const result = {};
+                    for (let i = 0; i < options.length; i++) {
+                        const option = options[i];
+                        if (option.value) { result[option.textContent.trim()] = option.value; }
+                    }
+                    return result;
+                },datepickerYear);
+
+                if(!yearsOptions.hasOwnProperty(newYear)){
+                    results.status = 404;
+                    results.msg =  `Error: [interactCalendar()] El nuevo año obtenido ${newYear} no existe en el calendario`;
+                    return results;
+                }
+                
+                await page.select(datepickerYear, newYear);
+                await new Promise(r => setTimeout(r, 500));
+
+                // Elegir mes
+
+                const datepickerMonth = '#ui-datepicker-div > div > div > select.ui-datepicker-month';
+                await page.waitForSelector(datepickerMonth);
+                const monthOptions = await page.evaluate((datepickerMonth) => {
+                    const select = document.querySelector(datepickerMonth);
+                    const options = select.options;
+                    const result = [];
+                    for (let i = 0; i < options.length; i++) {
+                        const option = options[i];
+                        if (option.value) { result.push(option.value); }
+                    }
+                    return result;
+                },datepickerMonth);
+                
+                if(!monthOptions.includes(newMonthRelative)){
+                    results.status = 404;
+                    results.msg =  `Error: [interactCalendar()] El nuevo mes[relat] obtenido ${newMonthRelative} no existe en el calendario`;
+                    return results;
+                }
+
+                await page.select(datepickerMonth, newMonthRelative);
+                await new Promise(r => setTimeout(r, 500));
+
+                // Elegir el dia 
+
+                results = await page.evaluate((newDay, results)=>{
+                    const tbodyTrCalendar = document.querySelectorAll('#ui-datepicker-div > table > tbody > tr');
+                    for(let tr of tbodyTrCalendar){
+                        const tdElements = tr.querySelectorAll('td');
+                        for(let td of tdElements){
+                            const tagA = td.querySelector('a');
+                            if(tagA !== null){
+                                const textDay = tagA.textContent.trim();
+                                if(textDay === newDay){ 
+                                    td.click(); 
+                                    results.status = 200;
+                                    break;
+                                }
+                            }
+                        }
+                        if(results.status === 200){ break; }
+                    }
+                    return results 
+                },newDay, results);
+
+                if(results.status !== 200){ throw new Error(`[interactCalendar()] Día no encontrado en el calendario ${filterFechaInput}`); }
+
+            }catch (error){
+                results.status = 404;
+                if (error.message === `[interactCalendar()] Día no encontrado en el calendario ${filterFechaInput}`){
+                    error = error.message
+                }
+                results.msg = error;
+            }
+
+            return results
+        }
+
+        // Descarga un documento de anexo
+        async function downloadAnexos({page, nameButtonDownload, fechaHoraNotif}){
+
+            try{
+                // Ruta para la descarga/lectura del documento (anexo)
+                const fechaOriginal = fechaHoraNotif;
+                const [fecha, hora] = fechaOriginal.split(' ');
+                const [dia, mes, year] = fecha.split('/');
+                const fechaFormateada = `${dia}-${mes}-${year}`;
+                const [horaParte, minutoParte, segundoParte] = hora.split(':');
+                const horaFormateada = `${horaParte}-${minutoParte}-${segundoParte}`;
+                const FechaHoraFormateada = `${fechaFormateada}-${horaFormateada}`;
+
+                const fullPathDir = `${baseDir}/${numExpediente.toUpperCase()}/casilla_electronica/notifi-${FechaHoraFormateada}`;
+                fs.mkdirSync(fullPathDir, { recursive: true });
+
+                let itemPath = `${baseItemPath}/${numExpediente.toUpperCase()}/casilla_electronica/notifi-${FechaHoraFormateada}`;
+
+                // Datos para el request
+
+                const formElement = await page.$('#frmAnexos');
+                const actionAttribute = await formElement.evaluate((element)=> element.getAttribute('action'));
+
+                //https://casillas.pj.gob.pe/sinoe/pages/casillas/notificaciones/notificacion-bandeja.xhtml
+                const url = `https://casillas.pj.gob.pe${actionAttribute}`;
+                
+                const inputsNameValue = await formElement.evaluate((element)=>{
+                    const inputsElements = element.querySelectorAll('input');
+                    let inputsNameValue = []
+                    for(let input of inputsElements){
+                        let name = input.getAttribute('name');
+                        let value = input.value;
+                        inputsNameValue.push({[name]: value});
+                    }
+                    return inputsNameValue
+                });
+                
+                let dataForm = {...inputsNameValue[0]};
+                dataForm = {...dataForm, [nameButtonDownload]:''};
+                dataForm = {...dataForm, ...inputsNameValue[1]};
+
+                let cookies = await page.cookies();
+                cookies = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+
+                const RequestHeaders = {
+                    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                    'Cookie': cookies,
+                    'Referer': 'https://casillas.pj.gob.pe/sinoe/pages/seguridad/sso/sso-menu-app.xhtml',
+                    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+                };
+
+                const response = await axios.post(url, dataForm, { headers: RequestHeaders, responseType: 'arraybuffer' });
+                
+                if(response.headers['content-type'].includes('application/pdf')){
+
+                    const fileName = response.headers['content-disposition'].match(/filename="(.+)"/)[1];
+                    let fullPath = `${fullPathDir}/${fileName}`
+
+                    // Verifica si existe el archivo.pdf (aveces envia nombres iguales)
+                    let idxRandom = 0; 
+                    while(fs.existsSync(fullPath)){
+                        idxRandom++;
+                        fullPath = `${path.join(path.dirname(fullPath), path.basename(fullPath, '.pdf'))}-${idxRandom}.pdf`;
+                    }
+                    
+                    fs.writeFileSync(fullPath, response.data);
+                    return `${itemPath}/${path.basename(fullPath)}`
+                }else{
+                    return "";
+                }
+            }catch(error){
+                throw new Error(`Error en la función [downloadAnexos()]/ ${error}`);
+            }
+
+        }
+
+        // Busca en la tabla
+        async function buscarExpedienteEnTabla({page, dataPartialResult}){
+
+            /* result
+            {
+                "R_1":{
+                    "Registro":{"N° Notificación":'', "N° Expediente":'', "Sumilla":'',"O.J":'', "Fecha":''},
+                    "Anexos": [
+                        {"Tipo":'', "Identificación de anexo":'', "Nro. de Paginas":'', "Documento":''},
+                        {"Tipo":'', "Identificación de anexo":'', "Nro. de Paginas":'', "Documento":''},
+                        ....
+                    ]
+                },
+                "R_2":{
+                    "Registro":{"N° Notificación":'', "N° Expediente":'', "Sumilla":'',"O.J":'', "Fecha":''},
+                    "Anexos": [
+                        {"Tipo":'', "Identificación de anexo":'', "Nro. de Paginas":'', "Documento":''},
+                        {"Tipo":'', "Identificación de anexo":'', "Nro. de Paginas":'', "Documento":''},
+                        ....
+                    ]
+                }
+                ...
+            }
+            */
+
+            // Cantidad de filas 
+            await page.waitForSelector('#frmBusqueda\\:tblLista_data');
+            const numRowsElements = await page.evaluate(()=>{
+                const rowsElements = document.querySelectorAll('#frmBusqueda\\:tblLista_data > tr');
+                return rowsElements.length;
+            });
+
+            let result = dataPartialResult[0];
+            let fechaDeReferencia = dataPartialResult[1];
+            let breakInRow = dataPartialResult[2];
+
+            // Iterar filas (Tabla de notificaciones)
+            for(let i=0; i < numRowsElements; i++){
+
+                // Una fila (Tabla de notificaciones)
+                let dataRow = await page.evaluate((i, numExpediente, fechaDeReferencia, result)=>{
+                    const templates = {
+                        "Registro":{"N° Notificación":'', "N° Expediente":'', "Sumilla":'',"O.J":'', "Fecha":''}
+                    };
+
+                    // Fecha inferior
+                    function lowerDate(dateStringRef, newDateString) {
+                        
+                        let partes = dateStringRef.split('/');
+                        let dia = parseInt(partes[0]);
+                        let mes = parseInt(partes[1]);
+                        let año = parseInt(partes[2]);
+
+                        const fechaRef = new Date(año, mes - 1, dia);
+
+                        partes = newDateString.split('/');
+                        dia = parseInt(partes[0]);
+                        mes = parseInt(partes[1]);
+                        año = parseInt(partes[2]);
+
+                        const newFecha = new Date(año, mes - 1, dia);
+
+                        if(fechaRef > newFecha){ return true; }
+                        else { return false; }
+                    }
+
+                    const rowsElements = document.querySelectorAll('#frmBusqueda\\:tblLista_data > tr');
+                    const columElements = rowsElements[i].querySelectorAll('td');
+
+                    // Columna fecha
+                    let fechaHora = columElements[columElements.length - 2].textContent.trim();
+                    const fecha = fechaHora.split(' ')[0].trim();
+
+                    if(fechaDeReferencia != null){
+                        if(lowerDate(fechaDeReferencia, fecha)) {
+                            //     [fechaDeReferencia, result, break itr-filas, readAnexos]
+                            return [fechaDeReferencia, result, true, false];
+                        }
+                    }
+
+                    // Columna N° de expediente
+                    const textColumNumExpediente = columElements[4].textContent.trim();
+
+                    if(textColumNumExpediente.toUpperCase() === numExpediente.toUpperCase()){
+
+                        const keyRx = `R_${Object.keys(result).length + 1}`;  // Último Rx del objeto
+                        result[keyRx] = {
+                            "Registro": {...templates.Registro},
+                            "Anexos":[]
+                        };
+
+                        const keysRegistro = Object.keys(templates.Registro);
+                        keysRegistro.forEach((key,index)=>{
+                            result[keyRx]["Registro"][key] = columElements[index + 3].textContent.trim();
+                        }); 
+                        
+                        fechaDeReferencia = fecha;
+
+                        // Abre panel de anexos
+                        const buttonVerAnexos = columElements[columElements.length - 1].querySelector('button');
+                        buttonVerAnexos.click();
+
+                        //     [fechaDeReferencia, result, break itr-filas, readAnexos]
+                        return [fechaDeReferencia, result, false, true];
+                    }
+
+                    //     [fechaDeReferencia, result, break itr-filas, readAnexos]
+                    return [fechaDeReferencia, result, false, false];
+
+                },i, numExpediente, fechaDeReferencia, result);
+
+
+                fechaDeReferencia = dataRow[0];
+                result = dataRow[1];
+
+                if(dataRow[2]) {  // "Break de filas"
+                    breakInRow = true;
+                    break; 
+                }
+
+                // Panel anexos visible
+                if (dataRow[3]){
+                    
+                    await new Promise(r => setTimeout(r, 1000));
+
+                    let panelAnexos = await page.$('#frmAnexos\\:dlgListaAnexos'); 
+                    let estilo = await page.evaluate(elemento => elemento.style.visibility, panelAnexos);
+
+                    if (estilo === 'visible') {
+                        
+                        // Tabla anexos 
+                        result = await page.evaluate((result)=>{
+
+                            const templates = {
+                                "Anexo": {"Tipo":'', "Identificación de anexo":'', "Nro. de Paginas":'', "Documento":''}
+                            };
+                            const keysResult = Object.keys(result);
+
+                            const rowsElements = document.querySelectorAll('#frmAnexos\\:tblListaAnexos_data > tr');
+                            for(let row of rowsElements){
+                                let dataColum = {...templates.Anexo};
+                                let columElements = row.querySelectorAll('td');
+                                
+                                dataColum["Tipo"] = columElements[0].textContent.trim();
+                                dataColum["Identificación de anexo"] = columElements[1].textContent.trim();
+                                dataColum["Nro. de Paginas"] = columElements[2].textContent.trim();
+                                let buttonDownloadElement = columElements[columElements.length -1].querySelector('button');
+                                let buttonDownloadName = buttonDownloadElement !== null? buttonDownloadElement.getAttribute('name'): "";
+                                dataColum["Documento"] = `${buttonDownloadName}`;
+
+                                result[keysResult[keysResult.length - 1]]["Anexos"].push(dataColum);
+                            }
+                            return result;
+                        }, result);
+
+                        // TABLA ANEXOS (Descarga de documentos - column final)
+
+                        let keysResult = Object.keys(result);
+                        let anexosLength = result[keysResult[keysResult.length - 1]]["Anexos"].length;
+                        let fechaHoraNotificacion = result[keysResult[keysResult.length - 1]]["Registro"]["Fecha"];
+
+                        for(let index=0; index < anexosLength; index++){
+                            let elementAnexoJson = result[keysResult[keysResult.length - 1]]["Anexos"][index];
+                            let documentName = elementAnexoJson["Documento"];
+                            let fullItemPath = await downloadAnexos({page:page, nameButtonDownload: documentName, fechaHoraNotif:fechaHoraNotificacion});
+                            result[keysResult[keysResult.length - 1]]["Anexos"][index]["Documento"] = fullItemPath;
+                        }
+
+                        let buttonCerrarPanelAnexos = await page.$('#frmAnexos\\:j_idt136');
+                        await buttonCerrarPanelAnexos.click();
+                        await new Promise(r => setTimeout(r, 1000));
+                    }
+                }
+            }
+
+            return [result, fechaDeReferencia, breakInRow];
+            
+        }
+
+        (async () => {
+
+            let browser = null;
+            let page = null;
+            let results = {'status': null, 'msg':'', 'data':{}};
+        
+            try{
+        
+                browser = await puppeteer.launch({
+                    args: ["--no-sandbox", "--disable-setuid-sandbox"],
+                    // headless: false
+                    headless: 'new'
+                }); 
+                
+                page = await browser.newPage();
+                await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+                await page.goto(url);
+        
+                // ________________PAG. DE LOGIN_______________________________________________________
+        
+                try{
+                    var imgCapchaSelector = '#frmLogin\\:imgCapcha';
+                    await page.waitForSelector(imgCapchaSelector);
+                
+                } catch(error){
+                    results.status = 404;
+                    results.msg =  `[Error en la pag. de login] ${error}`;
+                    await browser.close();
+                    return results;
+                }
+        
+                // Ingresa credenciales 
+        
+                const loginPageUserSelector = '#frmLogin > div.cuadro.bradio > app-root > div > div > div:nth-child(1) > div > input'
+                await page.waitForSelector(loginPageUserSelector);
+                await page.type(loginPageUserSelector, user, { delay: 100 });
+        
+                const loginPagePassSelector = '#frmLogin > div.cuadro.bradio > app-root > div > div > div:nth-child(3) > div > input'
+                await page.waitForSelector(loginPagePassSelector);
+                await page.type(loginPagePassSelector, password, {delay: 100});
+        
+                // Resolver captcha
+        
+                const imgCapcha = await page.$(imgCapchaSelector);
+                const captchaBuffer = await imgCapcha.screenshot();
+                const captcha = captchaBuffer.toString('base64');
+                //fs.writeFileSync('captura.png', captchaBuffer);
+                ac.setAPIKey(process.env.APIKEYANTICAPTCHA);
+                //Specify softId to earn 10% commission with your app.
+                //Get your softId here: https://anti-captcha.com/clients/tools/devcenter
+                ac.setSoftId(0);
+                
+                let text = '';
+                try{
+                    text = await ac.solveImage(captcha, true);
+                }catch(e){
+                    results.status = 404;
+                    results.msg = `[No se puedo resolver captcha] ${error}`;
+                    await browser.close();
+                    return results;
+                }
+                
+                const inputTextCaptcha = '#frmLogin\\:captcha';
+                await page.waitForSelector(inputTextCaptcha);
+                await page.type(inputTextCaptcha, text, { delay: 100 });
+                await new Promise(r => setTimeout(r, 500));
+        
+                const buscar = await page.$('#frmLogin\\:btnIngresar');
+                await buscar.click();
+                await new Promise(r => setTimeout(r, 1000));
+        
+        
+                // ________________PAG. SIGUIENTE [?]_______________________________________________________
+                
+                // Detección de otra sesión activa o Casilla Electrónica
+                // Nota: no tiene autorizado cerrar las sesiones
+        
+                const finalizarSesiones = new Promise((resolve, reject) => {
+                    page.waitForSelector('#j_idt9\\:btnSalir')
+                    .then(() => { resolve('Sesiones activas'); })
+                    .catch((error) => { reject(error); });
+                    });
+                
+                const casillaElectronica = new Promise((resolve, reject) => {
+                    page.waitForSelector('#frmNuevo\\:j_idt38 > div > img')
+                        .then(() => { resolve('Casilla electronica'); })
+                        .catch((error) => { reject(error); });
+                    });
+        
+                try {
+                    const result = await Promise.race([finalizarSesiones,casillaElectronica]);
+                    if (result === 'Sesiones activas') {
+                        results.status = 200;
+                        results.msg = 'Se ha detectado que cuenta con una SESIÓN ACTIVA.';
+                        await browser.close();
+                        return results;
+                    } else if (result !== 'Casilla electronica') {
+                        results.status = 404;
+                        results.msg = 'No se pudo pasar la pag. de login';
+                        await browser.close();
+                        return results;
+                    }
+                } catch(error) {  // timeout
+                    results.status = 404;
+                    results.msg = `No se pudo pasar la pag. de login`;
+                    await browser.close();
+                    return results;
+                }
+                
+                //______________PAG. DE BIENVENIDA - SERVICIOS ELECTRÓNICOS EN LÍNEA________________________
+                
+                const casillaElectronicaSelector = '#frmNuevo\\:j_idt38';
+                await page.waitForSelector(casillaElectronicaSelector);
+                const buttonCasillaElectronica = await page.$(casillaElectronicaSelector);
+                await buttonCasillaElectronica.click();
+                
+                try{
+                    await page.waitForNavigation({waitUntil: 'load'});
+                } catch(error){
+                    results.status = 404;
+                    results.msg = `[No se pudo ingresar a Casilla Electrónica] ${error}`;  
+        
+                    await page.waitForSelector('#frmNuevo\\:clCerrarSession');
+                    const buttonCerrarSesion = await page.$('#frmNuevo\\:clCerrarSession');
+                    await buttonCerrarSesion.click();
+                    await page.waitForSelector(imgCapchaSelector);
+                    await browser.close();
+                    return results;
+                }
+        
+                //________________PAG. CASILLAS ELECTRÓNICAS_______________________________________________________
+                
+                // Digita expediente
+                await page.waitForSelector('#frmBusqueda\\:filter_nroSolicitud');
+                await page.type('#frmBusqueda\\:filter_nroSolicitud', numExpediente, {delay: 100});
+        
+                const yearExpediente = parseInt(numExpediente.split('-')[1]);
+                // Fecha de hoy o ultimo
+                let startDateOrLast = getCurrentDate();
+                // Fecha 31 dias atrás
+                let newDate = goBackDays({currentDate: startDateOrLast});
+                // Días transcurridos al 01/01/the_year
+                let daysPassed = -1;
+                // Primera búsqueda
+                let firstSearchDone = false;
+                
+                while (true) {  
+        
+                    // Validando año
+                    if(parseInt(newDate.newYear) < yearExpediente){ 
+                        daysPassed = daysElapsedUntilDate(startDateOrLast);
+                        if(daysPassed > 0){
+                            newDate =  {newDay: '1', newMonthRelative: '0', newYear: yearExpediente.toString()};
+                        }else if(firstSearchDone){ break; }
+                    }
+        
+                    // Elegir fecha inicial 
+        
+                    let resultsInteractCalendar = await interactCalendar({page: page, newDate: newDate});
+                    await new Promise(r => setTimeout(r, 500));
+        
+                    if(resultsInteractCalendar.status === 404){
+                        results.status = 404;
+                        results.msg = resultsInteractCalendar.msg;
+        
+                        await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                        const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                        await buttonCerrarSesion.click();
+                        await page.waitForSelector(imgCapchaSelector);
+        
+                        await browser.close();
+                        return results;
+                    }
+        
+                    // Elegir fecha final
+                    if(daysPassed > 0){
+                        
+                        let finalDate = goForwardDays({
+                            currentDate: `${newDate.newDay}/${parseInt(newDate.newMonthRelative) + 1}/${newDate.newYear}`,
+                            numberDays: daysPassed
+                        });
+        
+                        resultsInteractCalendar = await interactCalendar({page: page, newDate: finalDate, filterFechaInput: 'fechaFinal'});
+                        await new Promise(r => setTimeout(r, 500));
+        
+                        if(resultsInteractCalendar.status === 404){
+                            results.status = 404;
+                            results.msg = resultsInteractCalendar.msg;
+        
+                            await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                            const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                            await buttonCerrarSesion.click();
+                            await page.waitForSelector(imgCapchaSelector);
+        
+                            await browser.close();
+                            return results;
+                        }
+                    }
+        
+                    // Botón buscar 
+        
+                    await page.waitForSelector('#frmBusqueda\\:j_idt74');
+                    let buttonBuscar = await page.$('#frmBusqueda\\:j_idt74');
+                    await buttonBuscar.click();
+                    await new Promise(r => setTimeout(r, 500));
+        
+                    // Verificar que alert dialog PROCESANDO no esté visible
+        
+                    let alertDialogElement = await page.$('#dlgBlock'); 
+                    while (true){
+                        if (alertDialogElement !== null) {
+                            let estilo = await page.evaluate(elemento => elemento.style.visibility, alertDialogElement);
+                            if (estilo === 'hidden') { break; } 
+                            await new Promise(r => setTimeout(r, 100));
+                        }else{
+                            await new Promise(r => setTimeout(r, 2000));
+                            break;
+                        }   
+                    }
+        
+                    // Elegir el máximo valor en la paginación 
+                    
+                    await page.waitForSelector('#frmBusqueda\\:tblLista_paginator_top > select');
+                    let paginatorOptions = await page.evaluate(() => {
+                        const select = document.querySelector('#frmBusqueda\\:tblLista_paginator_top > select');
+                        const options = select.options;
+                        const result = [];
+                        for (let i = 0; i < options.length; i++) {
+                            const option = options[i];
+                            if (option.value) { result.push(option.value); }
+                        }
+                        return result;
+                    });
+                    
+                    let paginatorOptionsInt = paginatorOptions.map( numeroStr => parseInt(numeroStr));
+                    let maxValue = Math.max(...paginatorOptionsInt);
+        
+                    await page.select('#frmBusqueda\\:tblLista_paginator_top > select', maxValue.toString());
+                    await new Promise(r => setTimeout(r, 500));
+        
+                    // Obtener de la cantidad de páginas
+                    // Obtener la cantidad de registros
+                    // Obtener la pagina actual 
+        
+                    await page.waitForSelector('#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-current');
+                    //output: "Registros: 11 - [ Página : 1/10 ]"
+                    let textPaginatorInfo = await page.evaluate(()=>{
+                        let spanUiPaginator = document.querySelector('#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-current');
+                        return spanUiPaginator.textContent.trim();
+                    });
+                    
+                    const regex = /(\d+)\s*-\s*\[\s*Página\s*:\s*(\d+)\/(\d+)\s*\]/;
+                    const matches = textPaginatorInfo.match(regex);
+                    let numRegist, numPagTotal, currentPag;
+        
+                    if (matches) {
+                        numRegist = parseInt(matches[1]);
+                        currentPag = parseInt(matches[2]);
+                        numPagTotal = parseInt(matches[3]);
+                    }else {
+                        results.status = 404;
+                        results.msg = 'No se puede obtener los valores de [registros y páginas] de la tabla';
+        
+                        await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                        const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                        await buttonCerrarSesion.click();
+                        await page.waitForSelector(imgCapchaSelector);
+        
+                        await browser.close();
+                        return results;
+                    }
+        
+                    // Interactura con flechas <NEXT> de paginación
+                    //                      [result, fechaDeReferencia, breakInRow];
+                    var dataPartialResult = [{}, null, false];
+        
+                    let paginatorNextSelector = '#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-next.ui-state-default.ui-corner-all';
+                    for(let pag=0; pag < numPagTotal; pag++){
+        
+                        if(numRegist === 0) { break; }
+        
+                        if(pag > 0){
+                            await page.waitForSelector(paginatorNextSelector);
+                            let paginatorNextElement = await page.$(paginatorNextSelector);
+                            await paginatorNextElement.click();
+                            await new Promise(r => setTimeout(r, 500));
+                        }
+        
+                        dataPartialResult = await buscarExpedienteEnTabla({page: page, dataPartialResult: dataPartialResult});
+                        if(dataPartialResult[2]) { break; }
+                
+                    } 
+                    
+                    // Escoger otro rango de fechas ???
+                    if(Object.keys(dataPartialResult[0]).length > 0){ break; }
+                    
+                    // Primera busqueda realizada
+                    firstSearchDone = true;
+                    // Última fecha
+                    startDateOrLast = `${newDate.newDay}/${parseInt(newDate.newMonthRelative) + 1}/${newDate.newYear}`;
+                    // Nueva fecha
+                    newDate = goBackDays({
+                        currentDate: `${newDate.newDay}/${parseInt(newDate.newMonthRelative) + 1}/${newDate.newYear}`,
+                        includeCurrentDate: false
+                    });
+        
+                }
+                
+                results.status = 200;
+                results.data['numResults'] = Object.keys(dataPartialResult[0]).length;
+                results.data['resultados'] = dataPartialResult[0];
+        
+                await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+                await browser.close();
+                
+                return results; 
+        
+            }catch(error){
+                results.status = 404;
+                results.msg = `[General] ${error}`;
+        
+                if(browser !== null){
+        
+                    const cerrarSesionPagBienvenida = new Promise((resolve, reject) => {
+                        page.waitForSelector('#frmNuevo\\:clCerrarSession')
+                        .then(() => { resolve({"selector": '#frmNuevo\\:clCerrarSession'}); })
+                        .catch((error) => { reject({"error": error}); });
+                        });
+                    
+                    const cerrarSesionCasillasElectronicas = new Promise((resolve, reject) => {
+                        page.waitForSelector('#frmMenu\\:clCerrarSession')
+                            .then(() => { resolve({"selector": '#frmMenu\\:clCerrarSession'}); })
+                            .catch((error) => { reject({"error": error}); });
+                        });
+        
+                    try {
+                        const result = await Promise.race([cerrarSesionPagBienvenida,cerrarSesionCasillasElectronicas]);
+                        const resultKey = Object.keys(result)[0];
+                        if (resultKey === 'selector') {
+                            if(result[resultKey].includes('#frmMenu')){
+                                // Verificar si el panel anexos esta visible
+                                let panelAnexos = await page.$('#frmAnexos\\:dlgListaAnexos'); 
+                                let estilo = await page.evaluate(elemento => elemento.style.visibility, panelAnexos);
+                                if (estilo === 'visible'){
+                                    let buttonCerrarPanelAnexos = await page.$('#frmAnexos\\:j_idt136');
+                                    await buttonCerrarPanelAnexos.click();
+                                    await new Promise(r => setTimeout(r, 1000));
+                                }
+                            }
+                            const buttonCerrarSesion = await page.$(result[resultKey]);
+                            await buttonCerrarSesion.click();
+                            await page.waitForSelector('#frmLogin\\:imgCapcha');
+                            await browser.close();
+                        } 
+                    } catch(error) {  // timeout
+                        await browser.close();
+                    }   
+                }
+        
+                // Borrar la carpeta de expediente creada
+                const fullPathDirExp = `${baseDir}/${firstCredenciales.code_company}/${numExpediente.toUpperCase()}`;
+                if(fs.existsSync(fullPathDirExp)){
+                    eliminarCarpeta(fullPathDirExp);
+                }
+        
+                return results;
+            }
+        })().then((results) => {
+            res.send(results);
+            console.log('Respuesta del RPA en Sinoe');
+            // console.log(JSON.stringify(results, null, 1)); 
+        })
+        .catch((error) => {
+            console.error("Ocurrió un error:", error);
+            res.send({'status': 404})
+        });
+    }else{
+        res.send({'status':404});
+    }
+    
+    
+});
+
+app.post("/sinoe-update-data", async (req, res) => {
+    let body_filtros = req.body;
+
     const uid = body_filtros.credential;
 
     // obtener el registro 
@@ -1905,15 +2800,17 @@ app.post("/sinoe-result-data", async (req, res) => {
     conexion.end();
 
     // Credenciales
-    const user = firstCredenciales.user /* "3510" */
-    const password = firstCredenciales.password /* "41053160martin" */
+    const user = firstCredenciales.user; /* "3510" */
+    const password = firstCredenciales.password; /* "41053160martin" */
 
     // Casilla Electónica
-    const numExpediente = body_filtros.codigoExpediente ; /* "03247-2012-0-1706-JR-CI-06" */
+    const numExpediente = body_filtros.numExpediente ; /* "03247-2012-0-1706-JR-CI-06" */
+
+    const fechaHoraNotifi = body_filtros.fechaHoraNotifi; /* "09/11/2023 09:54:29" */
 
     // Directorio de descarga de documentos (anexos)
-    const baseDir = dirGeneralSinoe;
-    const baseItemPath = '../storage/docs/sinoe/'+ firstCredenciales.code_company;
+    const baseDir = dirGeneralSinoe +"/"+ firstCredenciales.code_company;
+    const baseItemPath = '../storage/docs/sinoe/'+ firstCredenciales.code_company +"/";
 
     const url = 'https://casillas.pj.gob.pe/sinoe/login.xhtml';
 
@@ -1956,50 +2853,6 @@ app.post("/sinoe-result-data", async (req, res) => {
             "newMonthRelative": nuevoMesRelativo.toString(), 
             "newYear": nuevoYear.toString()
         };
-    }
-
-    // Aumenta N dias
-    function goForwardDays({ currentDate, numberDays = 10, includeCurrentDate = true }) {
-
-        let part = currentDate.split('/');
-        let day = parseInt(part[0]);
-        let month = parseInt(part[1]);
-        let year = parseInt(part[2]);
-
-        let fecha = new Date(year, month - 1, day);
-
-        if (includeCurrentDate) {
-            fecha.setDate(fecha.getDate() + numberDays - 1);
-        } else {
-            fecha.setDate(fecha.getDate() + numberDays);
-        }
-
-        let nuevoDia = fecha.getDate();
-        let nuevoMesRelativo = fecha.getMonth();  // 0 -11
-        let nuevoYear = fecha.getFullYear();
-        
-        return {
-            "newDay": nuevoDia.toString(),
-            "newMonthRelative": (nuevoMesRelativo).toString(), 
-            "newYear": nuevoYear.toString()
-        }; 
-    }
-
-    // Dias transcurridos desde el 1ro. enero
-    function daysElapsedUntilDate(fecha) {
-        
-        const partesFecha = fecha.split('/');
-        const dia = parseInt(partesFecha[0], 10);
-        const mes = parseInt(partesFecha[1], 10) - 1; // 0 - 11
-        const year = parseInt(partesFecha[2], 10);
-    
-        const fechaIngresada = new Date(year, mes, dia);
-        const primeroDeEnero = new Date(year, 0, 1);
-    
-        const diferenciaEnMilisegundos = fechaIngresada - primeroDeEnero;
-        const diasTranscurridos = Math.floor(diferenciaEnMilisegundos / (1000 * 60 * 60 * 24));
-    
-        return diasTranscurridos;
     }
 
     // Opten día actual
@@ -2143,8 +2996,8 @@ app.post("/sinoe-result-data", async (req, res) => {
             const horaFormateada = `${horaParte}-${minutoParte}-${segundoParte}`;
             const FechaHoraFormateada = `${fechaFormateada}-${horaFormateada}`;
 
-            const fullPathDir = `${baseDir}/${firstCredenciales.code_company}/${numExpediente.toUpperCase()}/casilla_electronica/notifi-${FechaHoraFormateada}`;
-            fs.mkdirSync(fullPathDir, { recursive: true });
+            const fullPathDir = `${baseDir}/${numExpediente.toUpperCase()}/casilla_electronica/notifi-${FechaHoraFormateada}`;
+            fs.mkdirSync(fullPathDir, { recursive: true }); 
 
             let itemPath = `${baseItemPath}/${numExpediente.toUpperCase()}/casilla_electronica/notifi-${FechaHoraFormateada}`;
 
@@ -2197,9 +3050,9 @@ app.post("/sinoe-result-data", async (req, res) => {
                 }
                 
                 fs.writeFileSync(fullPath, response.data);
-                return `${itemPath}/${path.basename(fullPath)}`
+                return [`${itemPath}/${path.basename(fullPath)}`, fullPathDir]
             }else{
-                return "";
+                return ["", ""];
             }
         }catch(error){
             throw new Error(`Error en la función [downloadAnexos()]/ ${error}`);
@@ -2208,7 +3061,7 @@ app.post("/sinoe-result-data", async (req, res) => {
     }
 
     // Busca en la tabla
-    async function buscarExpedienteEnTabla({page, dataPartialResult}){
+    async function buscarExpedienteEnTabla({page, dataPartialResult, fechaHoraDeReferencia}){
 
         /* result
         {
@@ -2232,6 +3085,7 @@ app.post("/sinoe-result-data", async (req, res) => {
         }
         */
 
+
         // Cantidad de filas 
         await page.waitForSelector('#frmBusqueda\\:tblLista_data');
         const numRowsElements = await page.evaluate(()=>{
@@ -2240,37 +3094,55 @@ app.post("/sinoe-result-data", async (req, res) => {
         });
 
         let result = dataPartialResult[0];
-        let fechaDeReferencia = dataPartialResult[1];
-        let breakInRow = dataPartialResult[2];
+        let breakInRow = dataPartialResult[1];
 
         // Iterar filas (Tabla de notificaciones)
         for(let i=0; i < numRowsElements; i++){
 
             // Una fila (Tabla de notificaciones)
-            let dataRow = await page.evaluate((i, numExpediente, fechaDeReferencia, result)=>{
+            let dataRow = await page.evaluate((i, numExpediente, fechaHoraDeReferencia, result)=>{
                 const templates = {
                     "Registro":{"N° Notificación":'', "N° Expediente":'', "Sumilla":'',"O.J":'', "Fecha":''}
                 };
 
                 // Fecha inferior
-                function lowerDate(dateStringRef, newDateString) {
+                function compareDate(dateStringRef, newDateString) {
                     
                     let partes = dateStringRef.split('/');
                     let dia = parseInt(partes[0]);
                     let mes = parseInt(partes[1]);
                     let año = parseInt(partes[2]);
-
+                
                     const fechaRef = new Date(año, mes - 1, dia);
-
+                
                     partes = newDateString.split('/');
                     dia = parseInt(partes[0]);
                     mes = parseInt(partes[1]);
                     año = parseInt(partes[2]);
-
+                
                     const newFecha = new Date(año, mes - 1, dia);
+                
+                    if(fechaRef > newFecha){   
+                        return true;   // fecha ingreada es menor
+                    }else if(fechaRef < newFecha){
+                        return false;  // fecha ingreada es mayor
+                    }else { 
+                        return null; // fecha ingreada es igual
+                    }
+                }
 
-                    if(fechaRef > newFecha){ return true; }
-                    else { return false; }
+                function compararHoras(horaReferencia, otraHora) {
+                    const horaReferenciaArray = horaReferencia.split(':').map(Number);
+                    const otraHoraArray = otraHora.split(':').map(Number);
+                
+                    for (let i = 0; i < horaReferenciaArray.length; i++) {
+                    if (horaReferenciaArray[i] < otraHoraArray[i]) {
+                        return false;  // hora ingresada es superior
+                    } else if (horaReferenciaArray[i] > otraHoraArray[i]) {
+                        return true; // hora ingresada es inferior
+                    }
+                    }
+                    return null;  // horas ingresadas eson iguales
                 }
 
                 const rowsElements = document.querySelectorAll('#frmBusqueda\\:tblLista_data > tr');
@@ -2279,14 +3151,23 @@ app.post("/sinoe-result-data", async (req, res) => {
                 // Columna fecha
                 let fechaHora = columElements[columElements.length - 2].textContent.trim();
                 const fecha = fechaHora.split(' ')[0].trim();
+                const hora = fechaHora.split(' ')[1].trim();
 
-                if(fechaDeReferencia != null){
-                    if(lowerDate(fechaDeReferencia, fecha)) {
-                        //     [fechaDeReferencia, result, break itr-filas, readAnexos]
-                        return [fechaDeReferencia, result, true, false];
+                // Fecha hora de referencia
+                const fechaRef = fechaHoraDeReferencia.split(' ')[0].trim();
+                const horaRef = fechaHoraDeReferencia.split(' ')[1].trim();
+
+                const compareDateResult = compareDate(fechaRef, fecha);
+                if(compareDateResult === true) {  // fecha inferior
+                    //     [result, break itr-filas, readAnexos]
+                    return [result, true, false];
+                }else if(compareDateResult === null){  // fecha iguales
+                    const compararHorasResult = compararHoras(horaRef, hora);
+                    if(compararHorasResult === true || compararHorasResult === null){  // hora inferior o igual
+                        return [result, true, false];
                     }
                 }
-
+                
                 // Columna N° de expediente
                 const textColumNumExpediente = columElements[4].textContent.trim();
 
@@ -2303,32 +3184,28 @@ app.post("/sinoe-result-data", async (req, res) => {
                         result[keyRx]["Registro"][key] = columElements[index + 3].textContent.trim();
                     }); 
                     
-                    fechaDeReferencia = fecha;
-
                     // Abre panel de anexos
                     const buttonVerAnexos = columElements[columElements.length - 1].querySelector('button');
                     buttonVerAnexos.click();
 
-                    //     [fechaDeReferencia, result, break itr-filas, readAnexos]
-                    return [fechaDeReferencia, result, false, true];
+                    //     [result, break itr-filas, readAnexos]
+                    return [result, false, true];
                 }
 
-                //     [fechaDeReferencia, result, break itr-filas, readAnexos]
-                return [fechaDeReferencia, result, false, false];
+                //     [result, break itr-filas, readAnexos]
+                return [result, false, false];
 
-            },i, numExpediente, fechaDeReferencia, result);
+            },i, numExpediente, fechaHoraDeReferencia, result);
 
+            result = dataRow[0];
 
-            fechaDeReferencia = dataRow[0];
-            result = dataRow[1];
-
-            if(dataRow[2]) {  // "Break de filas"
+            if(dataRow[1]) {  // "Break de filas"
                 breakInRow = true;
                 break; 
             }
 
             // Panel anexos visible
-            if (dataRow[3]){
+            if (dataRow[2]){
                 
                 await new Promise(r => setTimeout(r, 1000));
 
@@ -2371,10 +3248,20 @@ app.post("/sinoe-result-data", async (req, res) => {
                     for(let index=0; index < anexosLength; index++){
                         let elementAnexoJson = result[keysResult[keysResult.length - 1]]["Anexos"][index];
                         let documentName = elementAnexoJson["Documento"];
-                        let fullItemPath = await downloadAnexos({page:page, nameButtonDownload: documentName, fechaHoraNotif:fechaHoraNotificacion});
-                        result[keysResult[keysResult.length - 1]]["Anexos"][index]["Documento"] = fullItemPath;
-                    }
+                        let [fullItemPath, pathDownloadDoneTemp] = await downloadAnexos(
+                            {page:page, nameButtonDownload: documentName, fechaHoraNotif:fechaHoraNotificacion});
 
+                        result[keysResult[keysResult.length - 1]]["Anexos"][index]["Documento"] = fullItemPath;
+
+                        // Guarda las rutas a las notificaciones descargadas
+                        let pathDownloadDoneSet = new Set(pathDownloadDone);
+                        if (!pathDownloadDoneSet.has(pathDownloadDoneTemp)) {
+                            pathDownloadDoneSet.add(pathDownloadDoneTemp);
+                        }
+                        pathDownloadDone = Array.from(pathDownloadDoneSet);
+                        
+                    }
+                    
                     let buttonCerrarPanelAnexos = await page.$('#frmAnexos\\:j_idt136');
                     await buttonCerrarPanelAnexos.click();
                     await new Promise(r => setTimeout(r, 1000));
@@ -2382,9 +3269,12 @@ app.post("/sinoe-result-data", async (req, res) => {
             }
         }
 
-        return [result, fechaDeReferencia, breakInRow];
+        return [result, breakInRow];
         
     }
+
+    // global
+    let pathDownloadDone = [];
 
     (async () => {
 
@@ -2394,10 +3284,16 @@ app.post("/sinoe-result-data", async (req, res) => {
     
         try{
     
+            // Verifica que exista la carpeta del expediente - casilla electronica
+            const pathDirVerifi = `${baseDir}/${numExpediente.toUpperCase()}/casilla_electronica`;
+            if(!fs.existsSync(pathDirVerifi)){
+                throw new Error(`No existe la carpeta de Expediente/casilla-electronica >> ${pathDirVerifi}`);
+            }
+    
             browser = await puppeteer.launch({
                 args: ["--no-sandbox", "--disable-setuid-sandbox"],
-                // headless: false
-                headless: 'new'
+                headless: false
+                // headless: 'new'
             }); 
             
             page = await browser.newPage();
@@ -2490,7 +3386,7 @@ app.post("/sinoe-result-data", async (req, res) => {
                 }
             } catch(error) {  // timeout
                 results.status = 404;
-                results.msg = `No se pudo pasar la pag. de login`;
+                results.msg = `[No se pudo pasar la pag. de login] ${error}`;
                 await browser.close();
                 return results;
             }
@@ -2522,178 +3418,127 @@ app.post("/sinoe-result-data", async (req, res) => {
             await page.waitForSelector('#frmBusqueda\\:filter_nroSolicitud');
             await page.type('#frmBusqueda\\:filter_nroSolicitud', numExpediente, {delay: 100});
     
-            const yearExpediente = parseInt(numExpediente.split('-')[1]);
             // Fecha de hoy o ultimo
             let startDateOrLast = getCurrentDate();
             // Fecha 31 dias atrás
             let newDate = goBackDays({currentDate: startDateOrLast});
-            // Días transcurridos al 01/01/the_year
-            let daysPassed = -1;
-            // Primera búsqueda
-            let firstSearchDone = false;
-            
-            while (true) {  
+           
+            // El monitoreo será diario, en un rango de 31 dias
     
-                // Validando año
-                if(parseInt(newDate.newYear) < yearExpediente){ 
-                    daysPassed = daysElapsedUntilDate(startDateOrLast);
-                    if(daysPassed > 0){
-                        newDate =  {newDay: '1', newMonthRelative: '0', newYear: yearExpediente.toString()};
-                    }else if(firstSearchDone){ break; }
-                }
+            // Elegir fecha inicial 
+            let resultsInteractCalendar = await interactCalendar({page: page, newDate: newDate});
+            await new Promise(r => setTimeout(r, 500));
     
-                // Elegir fecha inicial 
+            if(resultsInteractCalendar.status === 404){
+                results.status = 404;
+                results.msg = resultsInteractCalendar.msg;
     
-                let resultsInteractCalendar = await interactCalendar({page: page, newDate: newDate});
-                await new Promise(r => setTimeout(r, 500));
+                await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
     
-                if(resultsInteractCalendar.status === 404){
-                    results.status = 404;
-                    results.msg = resultsInteractCalendar.msg;
-    
-                    await page.waitForSelector('#frmMenu\\:clCerrarSession');
-                    const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
-                    await buttonCerrarSesion.click();
-                    await page.waitForSelector(imgCapchaSelector);
-    
-                    await browser.close();
-                    return results;
-                }
-    
-                // Elegir fecha final
-                if(daysPassed > 0){
-                    
-                    let finalDate = goForwardDays({
-                        currentDate: `${newDate.newDay}/${parseInt(newDate.newMonthRelative) + 1}/${newDate.newYear}`,
-                        numberDays: daysPassed
-                    });
-    
-                    resultsInteractCalendar = await interactCalendar({page: page, newDate: finalDate, filterFechaInput: 'fechaFinal'});
-                    await new Promise(r => setTimeout(r, 500));
-    
-                    if(resultsInteractCalendar.status === 404){
-                        results.status = 404;
-                        results.msg = resultsInteractCalendar.msg;
-    
-                        await page.waitForSelector('#frmMenu\\:clCerrarSession');
-                        const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
-                        await buttonCerrarSesion.click();
-                        await page.waitForSelector(imgCapchaSelector);
-    
-                        await browser.close();
-                        return results;
-                    }
-                }
-    
-                // Botón buscar 
-    
-                await page.waitForSelector('#frmBusqueda\\:j_idt74');
-                let buttonBuscar = await page.$('#frmBusqueda\\:j_idt74');
-                await buttonBuscar.click();
-                await new Promise(r => setTimeout(r, 500));
-    
-                // Verificar que alert dialog PROCESANDO no esté visible
-    
-                let alertDialogElement = await page.$('#dlgBlock'); 
-                while (true){
-                    if (alertDialogElement !== null) {
-                        let estilo = await page.evaluate(elemento => elemento.style.visibility, alertDialogElement);
-                        if (estilo === 'hidden') { break; } 
-                        await new Promise(r => setTimeout(r, 100));
-                    }else{
-                        await new Promise(r => setTimeout(r, 2000));
-                        break;
-                    }   
-                }
-    
-                // Elegir el máximo valor en la paginación 
-                
-                await page.waitForSelector('#frmBusqueda\\:tblLista_paginator_top > select');
-                let paginatorOptions = await page.evaluate(() => {
-                    const select = document.querySelector('#frmBusqueda\\:tblLista_paginator_top > select');
-                    const options = select.options;
-                    const result = [];
-                    for (let i = 0; i < options.length; i++) {
-                        const option = options[i];
-                        if (option.value) { result.push(option.value); }
-                    }
-                    return result;
-                });
-                
-                let paginatorOptionsInt = paginatorOptions.map( numeroStr => parseInt(numeroStr));
-                let maxValue = Math.max(...paginatorOptionsInt);
-    
-                await page.select('#frmBusqueda\\:tblLista_paginator_top > select', maxValue.toString());
-                await new Promise(r => setTimeout(r, 500));
-    
-                // Obtener de la cantidad de páginas
-                // Obtener la cantidad de registros
-                // Obtener la pagina actual 
-    
-                await page.waitForSelector('#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-current');
-                //output: "Registros: 11 - [ Página : 1/10 ]"
-                let textPaginatorInfo = await page.evaluate(()=>{
-                    let spanUiPaginator = document.querySelector('#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-current');
-                    return spanUiPaginator.textContent.trim();
-                });
-                
-                const regex = /(\d+)\s*-\s*\[\s*Página\s*:\s*(\d+)\/(\d+)\s*\]/;
-                const matches = textPaginatorInfo.match(regex);
-                let numRegist, numPagTotal, currentPag;
-    
-                if (matches) {
-                    numRegist = parseInt(matches[1]);
-                    currentPag = parseInt(matches[2]);
-                    numPagTotal = parseInt(matches[3]);
-                }else {
-                    results.status = 404;
-                    results.msg = 'No se puede obtener los valores de [registros y páginas] de la tabla';
-    
-                    await page.waitForSelector('#frmMenu\\:clCerrarSession');
-                    const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
-                    await buttonCerrarSesion.click();
-                    await page.waitForSelector(imgCapchaSelector);
-    
-                    await browser.close();
-                    return results;
-                }
-    
-                // Interactura con flechas <NEXT> de paginación
-                //                      [result, fechaDeReferencia, breakInRow];
-                var dataPartialResult = [{}, null, false];
-    
-                let paginatorNextSelector = '#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-next.ui-state-default.ui-corner-all';
-                for(let pag=0; pag < numPagTotal; pag++){
-    
-                    if(numRegist === 0) { break; }
-    
-                    if(pag > 0){
-                        await page.waitForSelector(paginatorNextSelector);
-                        let paginatorNextElement = await page.$(paginatorNextSelector);
-                        await paginatorNextElement.click();
-                        await new Promise(r => setTimeout(r, 500));
-                    }
-    
-                    dataPartialResult = await buscarExpedienteEnTabla({page: page, dataPartialResult: dataPartialResult});
-                    if(dataPartialResult[2]) { break; }
-            
-                } 
-                
-                // Escoger otro rango de fechas ???
-                if(Object.keys(dataPartialResult[0]).length > 0){ break; }
-                
-                // Primera busqueda realizada
-                firstSearchDone = true;
-                // Última fecha
-                startDateOrLast = `${newDate.newDay}/${parseInt(newDate.newMonthRelative) + 1}/${newDate.newYear}`;
-                // Nueva fecha
-                newDate = goBackDays({
-                    currentDate: `${newDate.newDay}/${parseInt(newDate.newMonthRelative) + 1}/${newDate.newYear}`,
-                    includeCurrentDate: false
-                });
-    
+                await browser.close();
+                return results;
             }
+    
+            // Botón buscar 
+    
+            await page.waitForSelector('#frmBusqueda\\:j_idt74');
+            let buttonBuscar = await page.$('#frmBusqueda\\:j_idt74');
+            await buttonBuscar.click();
+            await new Promise(r => setTimeout(r, 500));
+    
+            // Verificar que alert dialog PROCESANDO no esté visible
+    
+            let alertDialogElement = await page.$('#dlgBlock'); 
+            while (true){
+                if (alertDialogElement !== null) {
+                    let estilo = await page.evaluate(elemento => elemento.style.visibility, alertDialogElement);
+                    if (estilo === 'hidden') { break; } 
+                    await new Promise(r => setTimeout(r, 100));
+                }else{
+                    await new Promise(r => setTimeout(r, 2000));
+                    break;
+                }   
+            }
+    
+            // Elegir el máximo valor en la paginación 
             
+            await page.waitForSelector('#frmBusqueda\\:tblLista_paginator_top > select');
+            let paginatorOptions = await page.evaluate(() => {
+                const select = document.querySelector('#frmBusqueda\\:tblLista_paginator_top > select');
+                const options = select.options;
+                const result = [];
+                for (let i = 0; i < options.length; i++) {
+                    const option = options[i];
+                    if (option.value) { result.push(option.value); }
+                }
+                return result;
+            });
+            
+            let paginatorOptionsInt = paginatorOptions.map( numeroStr => parseInt(numeroStr));
+            let maxValue = Math.max(...paginatorOptionsInt);
+    
+            await page.select('#frmBusqueda\\:tblLista_paginator_top > select', maxValue.toString());
+            await new Promise(r => setTimeout(r, 500));
+    
+            // Obtener de la cantidad de páginas
+            // Obtener la cantidad de registros
+            // Obtener la pagina actual 
+    
+            await page.waitForSelector('#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-current');
+            //output: "Registros: 11 - [ Página : 1/10 ]"
+            let textPaginatorInfo = await page.evaluate(()=>{
+                let spanUiPaginator = document.querySelector('#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-current');
+                return spanUiPaginator.textContent.trim();
+            });
+            
+            const regex = /(\d+)\s*-\s*\[\s*Página\s*:\s*(\d+)\/(\d+)\s*\]/;
+            const matches = textPaginatorInfo.match(regex);
+            let numRegist, numPagTotal, currentPag;
+    
+            if (matches) {
+                numRegist = parseInt(matches[1]);
+                currentPag = parseInt(matches[2]);
+                numPagTotal = parseInt(matches[3]);
+            }else {
+                results.status = 404;
+                results.msg = 'No se puede obtener los valores de [registros y páginas] de la tabla';
+    
+                await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+    
+                await browser.close();
+                return results;
+            }
+    
+            // Interactura con flechas <NEXT> de paginación
+            //                      [result, breakInRow];
+    
+            let dataPartialResult = [{}, false];
+    
+            let paginatorNextSelector = '#frmBusqueda\\:tblLista_paginator_top > span.ui-paginator-next.ui-state-default.ui-corner-all';
+            for(let pag=0; pag < numPagTotal; pag++){
+    
+                if(numRegist === 0) { break; }
+    
+                if(pag > 0){
+                    await page.waitForSelector(paginatorNextSelector);
+                    let paginatorNextElement = await page.$(paginatorNextSelector);
+                    await paginatorNextElement.click();
+                    await new Promise(r => setTimeout(r, 500));
+                }
+    
+                dataPartialResult = await buscarExpedienteEnTabla(
+                    {page: page, dataPartialResult: dataPartialResult, fechaHoraDeReferencia: fechaHoraNotifi});
+    
+                if(dataPartialResult[1]) { break; }  
+            } 
+            
+             
             results.status = 200;
             results.data['numResults'] = Object.keys(dataPartialResult[0]).length;
             results.data['resultados'] = dataPartialResult[0];
@@ -2748,8 +3593,769 @@ app.post("/sinoe-result-data", async (req, res) => {
                 }   
             }
     
+            // Borrar la carpeta de notificacion creada
+            if(pathDownloadDone.length > 0){
+                pathDownloadDone.forEach(path =>{
+                    eliminarCarpeta(path);
+                });  
+            }
+    
+            return results;
+        }
+    })().then((results) => {
+        res.send(results);
+        console.log('Respuesta del RPA en Sinoe Update');
+        // console.log(JSON.stringify(results, null, 1)); 
+    })
+    .catch((error) => {
+        console.error("Ocurrió un error:", error);
+        res.send({'status': 404})
+    });
+
+});
+
+app.post("/sinoe-historial-data", async (req, res) => {
+    let body_filtros = req.body;
+
+    const uid = body_filtros.credential;
+
+    // obtener el registro 
+    async function obtenerRegistroCredenciales(conexion , uid) {
+        return new Promise((resolve, reject) => {
+            conexion.query('SELECT * FROM credenciales WHERE uid = ?', [uid], (error, results) => {
+                if (error) {
+                    reject(error);
+                } else if (results.length === 0) {
+                    resolve(null); // No hay registros
+                } else {
+                    resolve(results[0]);
+                }
+            });
+        });
+    }
+
+    const conexion = conectarBaseDeDatos();
+    conexion.connect();
+
+    const firstCredenciales = await obtenerRegistroCredenciales(conexion, uid);
+    conexion.end();
+
+    // Credenciales
+    const user = firstCredenciales.user; /* "3510" */
+    const password = firstCredenciales.password; /* "41053160martin" */
+
+    // Casilla Electónica
+    const numExpediente = body_filtros.numExpediente ; /* "03247-2012-0-1706-JR-CI-06" */
+
+    // Directorio de descarga de documentos (anexos)
+    const baseDir = dirGeneralSinoe +"/"+ firstCredenciales.code_company;
+    const baseItemPath = '../storage/docs/sinoe/'+ firstCredenciales.code_company+ "/";
+
+    const url = 'https://casillas.pj.gob.pe/sinoe/login.xhtml';
+
+    // Borrar carpeta 
+    function eliminarCarpeta(ruta){
+        if (fs.existsSync(ruta)) {
+            fs.readdirSync(ruta).forEach((archivo, _) => {
+                const archivoRuta = path.join(ruta, archivo);
+                if (fs.lstatSync(archivoRuta).isDirectory()) {
+                eliminarCarpeta(archivoRuta);
+                } else {
+                fs.unlinkSync(archivoRuta);
+                }
+            });
+            fs.rmdirSync(ruta);
+        }
+    }
+
+    // RPA --> calendario  
+    async function interactCalendar({page, newDate, filterFechaInput= 'fechaInicio'}){
+        
+        let results = {'status': null, 'msg':''};
+
+        try { 
+            
+            let filterFechaInputSelector;
+            if(filterFechaInput === 'fechaInicio'){
+                filterFechaInputSelector = '#frmHistorialDocumentos\\:fechaInicialPresentacion > button';
+            }else if(filterFechaInput === 'fechaFinal'){
+                filterFechaInputSelector = '#frmHistorialDocumentos\\:fechaFinalPresentacion_input > button';
+            }else{
+                throw new Error(`Error en la función [interactCalendar()]/ filterFechaInput no válido`);
+            }
+            
+            await page.waitForSelector(filterFechaInputSelector);
+            const fechaInputElement = await page.$(filterFechaInputSelector);
+            await fechaInputElement.click();
+
+            const panelCalenderSelector = '#ui-datepicker-div';
+            await page.waitForSelector(panelCalenderSelector);
+            const calendar = await page.$(panelCalenderSelector);
+            const calendarioVisible = await page.evaluate((calendar) => {
+                const estilos = window.getComputedStyle(calendar);
+                return estilos.display === 'block';
+            },calendar);
+
+            if (!calendarioVisible) {  
+                results.status = 404;
+                results.msg = `[interactCalendar()] No se puede abrir el panel de calendario ${filterFechaInput}`;
+                return results;
+            }
+
+            const {newDay, newMonthRelative, newYear} = newDate;
+
+            // Elegir año
+
+            let numIntentos = 0;
+            let yearfound = false;
+            const datepickerYear = '#ui-datepicker-div > div > div > select.ui-datepicker-year';
+
+            while(true){
+
+                await page.waitForSelector(datepickerYear);
+                let yearsOptions = await page.evaluate((datepickerYear) => {
+                    const select = document.querySelector(datepickerYear);
+                    const options = select.options;
+                    const result = {};
+                    for (let i = 0; i < options.length; i++) {
+                        const option = options[i];
+                        if (option.value) { result[option.textContent.trim()] = option.value; }
+                    }
+                    return result;
+                },datepickerYear);
+
+                if(!yearsOptions.hasOwnProperty(newYear)){ 
+                    let oldestYear = Object.keys(yearsOptions)[0];
+                    await page.select(datepickerYear, oldestYear);
+                    await new Promise(r => setTimeout(r, 500));
+                    numIntentos ++; 
+                }
+                else { 
+                    yearfound = true;
+                    break; 
+                }
+
+                if(numIntentos === 3) { break; }
+            }
+
+            if(!yearfound){
+                results.status = 404;
+                results.msg =  `Error: [interactCalendar()] El nuevo año obtenido ${newYear} no existe en el calendario`;
+                return results;
+            }
+            
+            await page.select(datepickerYear, newYear);
+            await new Promise(r => setTimeout(r, 500));
+
+            // Elegir mes
+
+            const datepickerMonth = '#ui-datepicker-div > div > div > select.ui-datepicker-month';
+            await page.waitForSelector(datepickerMonth);
+            const monthOptions = await page.evaluate((datepickerMonth) => {
+                const select = document.querySelector(datepickerMonth);
+                const options = select.options;
+                const result = [];
+                for (let i = 0; i < options.length; i++) {
+                    const option = options[i];
+                    if (option.value) { result.push(option.value); }
+                }
+                return result;
+            },datepickerMonth);
+            
+            if(!monthOptions.includes(newMonthRelative)){
+                results.status = 404;
+                results.msg =  `Error: [interactCalendar()] El nuevo mes[relat] obtenido ${newMonthRelative} no existe en el calendario`;
+                return results;
+            }
+
+            await page.select(datepickerMonth, newMonthRelative);
+            await new Promise(r => setTimeout(r, 500));
+
+            // Elegir el dia 
+
+            results = await page.evaluate((newDay, results)=>{
+                const tbodyTrCalendar = document.querySelectorAll('#ui-datepicker-div > table > tbody > tr');
+                for(let tr of tbodyTrCalendar){
+                    const tdElements = tr.querySelectorAll('td');
+                    for(let td of tdElements){
+                        const tagA = td.querySelector('a');
+                        if(tagA !== null){
+                            const textDay = tagA.textContent.trim();
+                            if(textDay === newDay){ 
+                                td.click(); 
+                                results.status = 200;
+                                break;
+                            }
+                        }
+                    }
+                    if(results.status === 200){ break; }
+                }
+                return results 
+            },newDay, results);
+
+            if(results.status !== 200){ throw new Error(`[interactCalendar()] Día no encontrado en el calendario ${filterFechaInput}`); }
+
+        }catch (error){
+            results.status = 404;
+            if (error.message === `[interactCalendar()] Día no encontrado en el calendario ${filterFechaInput}`){
+                error = error.message
+            }
+            results.msg = error;
+        }
+
+        return results
+    }
+
+    // Descarga un documento de anexo
+    async function downloadAnexos({page, nameButtonDownload, fechaHoraNotif, tipoDocumento}){
+        
+        try{
+            // Ruta para la descarga/lectura del documento (anexo)
+            const fechaOriginal = fechaHoraNotif;
+            const [fecha, hora] = fechaOriginal.split(' ');
+            const [dia, mes, year] = fecha.split('/');
+            const fechaFormateada = `${dia}-${mes}-${year}`;
+            const [horaParte, minutoParte, segundoParte] = hora.split(':');
+            const horaFormateada = `${horaParte}-${minutoParte}-${segundoParte}`;
+            const FechaHoraFormateada = `${fechaFormateada}-${horaFormateada}`;
+
+            const fullPathDir = `${baseDir}/${numExpediente.toUpperCase()}/historial/${tipoDocumento}-${FechaHoraFormateada}`;
+            fs.mkdirSync(fullPathDir, { recursive: true });
+
+            let itemPath = `${baseItemPath}/${numExpediente.toUpperCase()}/historial/${tipoDocumento}-${FechaHoraFormateada}`;
+
+            // Datos para el request
+    
+            const formElement = await page.$('#frmDialogArchivosDocumento');
+            const actionAttribute = await formElement.evaluate((element)=> element.getAttribute('action'));
+
+            //https://casillas.pj.gob.pe/sinoe/pages/casillas/notificaciones/notificacion-bandeja.xhtml
+            const url = `https://expedientes.pj.gob.pe${actionAttribute}`;
+            
+            const inputsNameValue = await formElement.evaluate((element)=>{
+                const inputsElements = element.querySelectorAll('input');
+                let inputsNameValue = []
+                for(let input of inputsElements){
+                    let name = input.getAttribute('name');
+                    let value = input.value;
+                    inputsNameValue.push({[name]: value});
+                }
+                return inputsNameValue
+            });
+            
+            let dataForm = {...inputsNameValue[0]};
+            dataForm = {...dataForm, [nameButtonDownload]:''};
+            dataForm = {...dataForm, ...inputsNameValue[1]};
+
+            let cookies = await page.cookies();
+            cookies = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+
+            const RequestHeaders = {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Cookie': cookies,
+                'Referer': 'https://expedientes.pj.gob.pe/mpe/pages/historial/consultar-historial.xhtml',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            };
+
+            const response = await axios.post(url, dataForm, { headers: RequestHeaders, responseType: 'arraybuffer' });
+            
+            if(response.headers['content-type'].includes('application/pdf')){
+
+                const fileName = response.headers['content-disposition'].match(/filename="(.+)"/)[1];
+                let fullPath = `${fullPathDir}/${fileName}`
+
+                // Verifica si existe el archivo.pdf (aveces envia nombres iguales)
+                let idxRandom = 0; 
+                while(fs.existsSync(fullPath)){
+                    idxRandom++;
+                    fullPath = `${path.join(path.dirname(fullPath), path.basename(fullPath, '.pdf'))}-${idxRandom}.pdf`;
+                }
+                
+                fs.writeFileSync(fullPath, response.data);
+                return `${itemPath}/${path.basename(fullPath)}`
+            }else{
+                return "";
+            }
+        }catch(error){
+            throw new Error(`Error en la función [downloadAnexos()]/ ${error}`);
+        }
+
+    }
+
+    // Busca en la tabla
+    async function buscarExpedienteEnTabla({page}){
+        // Cantidad de filas 
+        await page.waitForSelector('#frmHistorialDocumentos\\:tblListHistorialEscrito_data');
+        const numRowsElements = await page.evaluate(()=>{
+            const rowsElements = document.querySelectorAll('#frmHistorialDocumentos\\:tblListHistorialEscrito_data > tr');
+            return rowsElements.length;
+        });
+
+        let result = {};
+        let fechaDeReferencia = null;
+
+        // Iterar filas (Tabla de Registros)
+        for(let i=0; i < numRowsElements; i++){
+
+            // Una fila (Tabla de Registros)
+            let dataRow = await page.evaluate((i, numExpediente, fechaDeReferencia, result)=>{
+                const templates = {
+                    "Registro":{"Cod. Expediente":'', "CII":'', "Nro. Escrito":'', "Distrito Judicial":'',
+                                "Órgano Jurisdiccional":'', "Tipo de Documento":'', "Fecha de Presentación": '', "Sumilla":''
+                            }
+                };
+
+                // Fecha inferior
+                function lowerDate(dateStringRef, newDateString) {
+                    
+                    let partes = dateStringRef.split('/');
+                    let dia = parseInt(partes[0]);
+                    let mes = parseInt(partes[1]);
+                    let año = parseInt(partes[2]);
+
+                    const fechaRef = new Date(año, mes - 1, dia);
+
+                    partes = newDateString.split('/');
+                    dia = parseInt(partes[0]);
+                    mes = parseInt(partes[1]);
+                    año = parseInt(partes[2]);
+
+                    const newFecha = new Date(año, mes - 1, dia);
+
+                    if(fechaRef > newFecha){ return true; }
+                    else { return false; }
+                }
+
+                const rowsElements = document.querySelectorAll('#frmHistorialDocumentos\\:tblListHistorialEscrito_data > tr');
+                const columElements = rowsElements[i].querySelectorAll('td');
+
+                // Columna fecha de presentación
+                let fechaHora = columElements[columElements.length - 3].textContent.trim();
+                const fecha = fechaHora.split(' ')[0].trim();
+
+                if(fechaDeReferencia != null){
+                    if(lowerDate(fechaDeReferencia, fecha)) {
+                        //     [fechaDeReferencia, result, break itr-filas, readArchivos]
+                        return [fechaDeReferencia, result, true, false];
+                    }
+                }
+
+                // Columna N° de expediente
+                const textColumNumExpediente = columElements[1].textContent.trim();
+
+                if(textColumNumExpediente.toUpperCase() === numExpediente.toUpperCase()){
+
+                    const keyRx = `R_${Object.keys(result).length + 1}`;  // Último Rx del objeto
+                    result[keyRx] = {
+                        "Registro": {...templates.Registro},
+                        "Archivos":[]
+                    };
+
+                    const keysRegistro = Object.keys(templates.Registro);
+                    keysRegistro.forEach((key,index)=>{
+                        result[keyRx]["Registro"][key] = columElements[index + 1].textContent.trim();
+                    }); 
+                    
+                    fechaDeReferencia = fecha;
+
+                    // Abre panel de Archivos
+                    const buttonVerAnexos = columElements[columElements.length - 1].querySelector('button');
+                    buttonVerAnexos.click();
+
+                    //     [fechaDeReferencia, result, break itr-filas, readArchivos]
+                    return [fechaDeReferencia, result, false, true];
+                }
+
+                //     [fechaDeReferencia, result, break itr-filas, readArchivos]
+                return [fechaDeReferencia, result, false, false];
+
+            },i, numExpediente, fechaDeReferencia, result);
+
+
+            fechaDeReferencia = dataRow[0];
+            result = dataRow[1];
+
+            if(dataRow[2]) { break; } // "Break de filas"
+
+            // Panel anexos visible
+            if (dataRow[3]){
+                
+                await new Promise(r => setTimeout(r, 1000));
+
+                // Verificar que alert dialog [@] no esté visible
+                let alertDialogElement = await page.$('#j_idt163'); 
+                while (true){
+                    if (alertDialogElement !== null) {
+                        let estilo = await page.evaluate(elemento => elemento.style.display, alertDialogElement);
+                        if (estilo === 'none') { break; } 
+                        await new Promise(r => setTimeout(r, 100));
+                    }else{
+                        await new Promise(r => setTimeout(r, 5000));
+                        break;
+                    }   
+                }
+
+                let panelAnexos = await page.$('#frmDialogArchivosDocumento\\:dlgListaTerceros'); 
+                let estilo = await page.evaluate(elemento => elemento.style.display, panelAnexos);
+                
+                if (estilo === 'block') {
+                    
+                    // Tabla Archivos 
+                    result = await page.evaluate((result)=>{
+
+                        const templates = { "Archivos": {"Descripción":'', "Documento":''} };
+                        const keysResult = Object.keys(result);
+
+                        const rowsElements = document.querySelectorAll('#frmDialogArchivosDocumento\\:tblListaDocumentoDigital_data > tr');
+                        for(let row of rowsElements){
+                            let dataColum = {...templates.Archivos};
+                            let columElements = row.querySelectorAll('td');
+                            
+                            dataColum["Descripción"] = columElements[1].textContent.trim();
+                            let buttonDownloadElement = columElements[columElements.length -1].querySelector('button');
+                            let buttonDownloadName = buttonDownloadElement !== null? buttonDownloadElement.getAttribute('name'): "";
+                            dataColum["Documento"] = `${buttonDownloadName}`;
+
+                            result[keysResult[keysResult.length - 1]]["Archivos"].push(dataColum);
+                        }
+                        return result;
+                    }, result);
+
+                    // TABLA ARCHIVOS (Descarga de documentos - column final)
+                    
+                    let keysResult = Object.keys(result);
+                    let anexosLength = result[keysResult[keysResult.length - 1]]["Archivos"].length;
+                    let fechaHoraPresentDocumentos = result[keysResult[keysResult.length - 1]]["Registro"]["Fecha de Presentación"];
+                    let tipoDocumento = result[keysResult[keysResult.length - 1]]["Registro"]["Tipo de Documento"];
+
+                    for(let index=0; index < anexosLength; index++){
+                        let elementAnexoJson = result[keysResult[keysResult.length - 1]]["Archivos"][index];
+                        let documentName = elementAnexoJson["Documento"];
+                        let fullItemPath = await downloadAnexos({
+                            page:page, nameButtonDownload: documentName, fechaHoraNotif:fechaHoraPresentDocumentos, tipoDocumento: tipoDocumento});
+                        result[keysResult[keysResult.length - 1]]["Archivos"][index]["Documento"] = fullItemPath;
+                    }
+
+                    let buttonCerrarPanelAnexos = await page.$('#frmDialogArchivosDocumento\\:j_idt139');
+                    await buttonCerrarPanelAnexos.click();
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+        }
+
+        return result;
+        
+    }
+
+    (async () => {
+
+        let browser = null;
+        let page = null;
+        let results = {'status': null, 'msg':'', 'data':{}};
+    
+        try{
+    
+            // Verifica que exista la carpeta del expediente 
+            const pathDirVerifi = `${baseDir}/${numExpediente.toUpperCase()}`;
+            if(!fs.existsSync(pathDirVerifi)){
+                throw new Error(`No existe la carpeta del Expediente >> ${pathDirVerifi}`);
+            }
+    
+    
+            browser = await puppeteer.launch({
+                args: ["--no-sandbox", "--disable-setuid-sandbox"],
+                headless: false
+                // headless: 'new'
+            }); 
+            
+            page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+            await page.goto(url);
+    
+            // ________________PAG. DE LOGIN_______________________________________________________
+    
+            try{
+                var imgCapchaSelector = '#frmLogin\\:imgCapcha';
+                await page.waitForSelector(imgCapchaSelector);
+               
+            } catch(error){
+                results.status = 404;
+                results.msg =  `[Error en la pag. de login] ${error}`;
+                await browser.close();
+                return results;
+            }
+    
+            // Ingresa credenciales 
+    
+            const loginPageUserSelector = '#frmLogin > div.cuadro.bradio > app-root > div > div > div:nth-child(1) > div > input'
+            await page.waitForSelector(loginPageUserSelector);
+            await page.type(loginPageUserSelector, user, { delay: 100 });
+    
+            const loginPagePassSelector = '#frmLogin > div.cuadro.bradio > app-root > div > div > div:nth-child(3) > div > input'
+            await page.waitForSelector(loginPagePassSelector);
+            await page.type(loginPagePassSelector, password, {delay: 100});
+            
+            // Resolver captcha
+    
+            const imgCapcha = await page.$(imgCapchaSelector);
+            const captchaBuffer = await imgCapcha.screenshot();
+            const captcha = captchaBuffer.toString('base64');
+            //fs.writeFileSync('captura.png', captchaBuffer);
+            ac.setAPIKey(process.env.APIKEYANTICAPTCHA);
+            //Specify softId to earn 10% commission with your app.
+            //Get your softId here: https://anti-captcha.com/clients/tools/devcenter
+            ac.setSoftId(0);
+            
+            let text = '';
+            try{
+                text = await ac.solveImage(captcha, true);
+            }catch(e){
+                results.status = 404;
+                results.msg = `[No se puedo resolver captcha] ${error}`;
+                await browser.close();
+                return results;
+            }
+            
+            const inputTextCaptcha = '#frmLogin\\:captcha';
+            await page.waitForSelector(inputTextCaptcha);
+            await page.type(inputTextCaptcha, text, { delay: 100 });
+            await new Promise(r => setTimeout(r, 500));
+    
+            const buscar = await page.$('#frmLogin\\:btnIngresar');
+            await buscar.click();
+            await new Promise(r => setTimeout(r, 1000));
+    
+    
+            // ________________PAG. SIGUIENTE [?]_______________________________________________________
+            
+            // Detección de otra sesión activa o Casilla Electrónica
+            // Nota: no tiene autorizado cerrar las sesiones
+    
+            const finalizarSesiones = new Promise((resolve, reject) => {
+                page.waitForSelector('#j_idt9\\:btnSalir')
+                  .then(() => { resolve('Sesiones activas'); })
+                  .catch((error) => { reject(error); });
+                });
+            
+            const casillaElectronica = new Promise((resolve, reject) => {
+                page.waitForSelector('#frmNuevo\\:j_idt38 > div > img')
+                    .then(() => { resolve('Casilla electronica'); })
+                    .catch((error) => { reject(error); });
+                });
+    
+            try {
+                const result = await Promise.race([finalizarSesiones,casillaElectronica]);
+                if (result === 'Sesiones activas') {
+                    results.status = 200;
+                    results.msg = 'Se ha detectado que cuenta con una SESIÓN ACTIVA.';
+                    await browser.close();
+                    return results;
+                } else if (result !== 'Casilla electronica') {
+                    results.status = 404;
+                    results.msg = 'No se pudo pasar la pag. de login';
+                    await browser.close();
+                    return results;
+                }
+            } catch(error) {  // timeout
+                results.status = 404;
+                results.msg = `[No se pudo pasar la pag. de login] ${error}`;
+                await browser.close();
+                return results;
+            }
+            
+            //______________PAG. DE BIENVENIDA - SERVICIOS ELECTRÓNICOS EN LÍNEA________________________
+            
+            // Ingresar a Mesa de Partes Electrónica
+    
+            const MPESelector = '#frmNuevo\\:j_idt41';
+            await page.waitForSelector(MPESelector);
+            const buttonMPE = await page.$(MPESelector);
+            await buttonMPE.click();
+            
+            try{
+                await page.waitForNavigation({waitUntil: 'load'});
+            } catch(error){
+                results.status = 404;
+                results.msg = `[No se pudo ingresar a Mesa de Partes Electónica] ${error}`;  
+    
+                await page.waitForSelector('#frmNuevo\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmNuevo\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+                await browser.close();
+                return results;
+            }
+    
+            //________________PAG. MESA DE PARTES ELECTRÓNICAS_______________________________________________________
+    
+            // Ingresar a historial
+            let historialSelector = '#frmMenu\\:menuPrincipal > ul > li:nth-child(4) > a';
+            await page.waitForSelector(historialSelector);
+            await page.hover(historialSelector);
+            await new Promise(r => setTimeout(r, 500));
+    
+            historialSelector = '#frmMenu\\:menuPrincipal > ul > li.ui-widget.ui-menuitem.ui-corner-all.ui-menu-parent.ui-menuitem-active > ul > li > a';
+            const historial = await page.$(historialSelector);
+            await historial.click();
+            
+            try{
+                await page.waitForNavigation({waitUntil: 'load'}); 
+            } catch(error){
+                results.status = 404;
+                results.msg = `[No se pudo ingresar a Historial de Mesa de Partes Electónica] ${error}`;  
+    
+                await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+    
+                await browser.close();
+                return results;
+            }
+    
+            // Ingresar datos 
+    
+            const buttonBuscarSelector = '#frmHistorialDocumentos\\:btnBuscarHistorial';
+            await page.waitForSelector(buttonBuscarSelector);
+            
+            const tipoDePresentacionSelector = '#frmHistorialDocumentos\\:presentacion';
+            await page.waitForSelector(tipoDePresentacionSelector);
+            await page.select(tipoDePresentacionSelector, "1");  // Elige solo Escrito
+            await new Promise(r => setTimeout(r, 500));
+    
+            const nroExpedienteSelector = '#frmHistorialDocumentos\\:nroExpediente';
+            await page.waitForSelector(nroExpedienteSelector);
+            const digitosExpediente = numExpediente.split('-');
+            const nroExpediente = `${digitosExpediente[0]}-${digitosExpediente[1]}`;
+            await page.type(nroExpedienteSelector, nroExpediente, { delay: 100 });
+            await new Promise(r => setTimeout(r, 500));
+    
+            const yearExpediente = numExpediente.split('-')[1];
+            let newDate = {
+                "newDay": "1", 
+                "newMonthRelative": "0", 
+                "newYear": yearExpediente
+            };
+            
+            // Elegir fecha inicial 
+    
+            let resultsInteractCalendar = await interactCalendar({page: page, newDate: newDate});
+            await new Promise(r => setTimeout(r, 500));
+    
+            if(resultsInteractCalendar.status === 404){
+                results.status = 404;
+                results.msg = resultsInteractCalendar.msg;
+    
+                await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+    
+                await browser.close();
+                return results;
+            }
+    
+            // Botón buscar 
+    
+            await page.waitForSelector(buttonBuscarSelector);
+            let buttonBuscar = await page.$(buttonBuscarSelector);
+            await buttonBuscar.click();
+            await new Promise(r => setTimeout(r, 500));
+    
+            // Verificar que alert dialog [@] no esté visible
+    
+            let alertDialogElement = await page.$('#j_idt163'); 
+            while (true){
+                if (alertDialogElement !== null) {
+                    let estilo = await page.evaluate(elemento => elemento.style.display, alertDialogElement);
+                    if (estilo === 'none') { break; } 
+                    await new Promise(r => setTimeout(r, 100));
+                }else{
+                    await new Promise(r => setTimeout(r, 5000));
+                    break;
+                }   
+            }
+    
+            // Elegir el máximo valor en la paginación 
+            
+            await page.waitForSelector('#frmHistorialDocumentos\\:tblListHistorialEscrito\\:j_id10');
+            let paginatorOptions = await page.evaluate(() => {
+                const select = document.querySelector('#frmHistorialDocumentos\\:tblListHistorialEscrito\\:j_id10');
+                const options = select.options;
+                const result = [];
+                for (let i = 0; i < options.length; i++) {
+                    const option = options[i];
+                    if (option.value) { result.push(option.value); }
+                }
+                return result;
+            });
+            
+            let paginatorOptionsInt = paginatorOptions.map( numeroStr => parseInt(numeroStr));
+            let maxValue = Math.max(...paginatorOptionsInt);
+    
+            await page.select('#frmHistorialDocumentos\\:tblListHistorialEscrito\\:j_id10', maxValue.toString());
+            await new Promise(r => setTimeout(r, 500));
+    
+            // Se asume que el primera fila de la pag. 1 es el resultado más reciente
+            const dataPartialResult = await buscarExpedienteEnTabla({page: page});
+    
+            results.status = 200;
+            results.data['numResults'] = Object.keys(dataPartialResult).length;
+            results.data['resultados'] = dataPartialResult;
+    
+            await page.waitForSelector('#frmMenu\\:clCerrarSession');
+            const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+            await buttonCerrarSesion.click();
+            await page.waitForSelector(imgCapchaSelector);
+            await browser.close();
+            
+            return results;  
+    
+        }catch(error){
+            results.status = 404;
+            results.msg = `[General] ${error}`;
+    
+            if(browser !== null){
+    
+                const cerrarSesionPagBienvenida = new Promise((resolve, reject) => {
+                    page.waitForSelector('#frmNuevo\\:clCerrarSession')
+                      .then(() => { resolve({"selector": '#frmNuevo\\:clCerrarSession'}); })
+                      .catch((error) => { reject({"error": error}); });
+                    });
+                
+                const cerrarSesionCasillasElectronicas = new Promise((resolve, reject) => {
+                    page.waitForSelector('#frmMenu\\:clCerrarSession')
+                        .then(() => { resolve({"selector": '#frmMenu\\:clCerrarSession'}); })
+                        .catch((error) => { reject({"error": error}); });
+                    });
+    
+                try {
+                    const result = await Promise.race([cerrarSesionPagBienvenida,cerrarSesionCasillasElectronicas]);
+                    const resultKey = Object.keys(result)[0];
+                    if (resultKey === 'selector') {
+                        if(result[resultKey].includes('#frmMenu')){
+                            // Verificar si el panel anexos esta visible
+                            let panelAnexos = await page.$('#frmDialogArchivosDocumento\\:dlgListaTerceros'); 
+                            let estilo = await page.evaluate(elemento => elemento.style.display, panelAnexos);
+                            if (estilo === 'block'){
+                                let buttonCerrarPanelAnexos = await page.$('#frmDialogArchivosDocumento\\:j_idt139');
+                                await buttonCerrarPanelAnexos.click();
+                                await new Promise(r => setTimeout(r, 1000));
+                            }
+                        }
+                        const buttonCerrarSesion = await page.$(result[resultKey]);
+                        await buttonCerrarSesion.click();
+                        await page.waitForSelector('#frmLogin\\:imgCapcha');
+                        await browser.close();
+                    } 
+                } catch(error) {  // timeout
+                    await browser.close();
+                }   
+            }
+    
             // Borrar la carpeta de expediente creada
-            const fullPathDirExp = `${baseDir}/${firstCredenciales.code_company}/${numExpediente.toUpperCase()}`;
+            const fullPathDirExp = `${baseDir}/${numExpediente.toUpperCase()}/historial`;
             if(fs.existsSync(fullPathDirExp)){
                 eliminarCarpeta(fullPathDirExp);
             }
@@ -2758,17 +4364,847 @@ app.post("/sinoe-result-data", async (req, res) => {
         }
     })().then((results) => {
         res.send(results);
-        console.log('Respuesta del RPA en Sinoe');
+        console.log('Respuesta del RPA en Sinoe Historial');
         // console.log(JSON.stringify(results, null, 1)); 
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(404);
+        res.send({'status': 404})
     });
 
 });
 
+app.post("/sinoe-historial-update-data", async (req, res) => {
+    let body_filtros = req.body;
 
+    const uid = body_filtros.credential;
+
+    // obtener el registro 
+    async function obtenerRegistroCredenciales(conexion , uid) {
+        return new Promise((resolve, reject) => {
+            conexion.query('SELECT * FROM credenciales WHERE uid = ?', [uid], (error, results) => {
+                if (error) {
+                    reject(error);
+                } else if (results.length === 0) {
+                    resolve(null); // No hay registros
+                } else {
+                    resolve(results[0]);
+                }
+            });
+        });
+    }
+
+    const conexion = conectarBaseDeDatos();
+    conexion.connect();
+
+    const firstCredenciales = await obtenerRegistroCredenciales(conexion, uid);
+    conexion.end();
+
+    // Credenciales
+    const user = firstCredenciales.user; /* "3510" */
+    const password = firstCredenciales.password; /* "41053160martin" */
+
+    // Casilla Electónica
+    const numExpediente = body_filtros.numExpediente ; /* "03247-2012-0-1706-JR-CI-06" */
+
+    const fechaHoraPresentacion = body_filtros.fechaHoraPresentacion; /* "25/10/2023 00:12:33" */
+
+    // Directorio de descarga de documentos (anexos)
+    const baseDir = dirGeneralSinoe +"/"+ firstCredenciales.code_company;
+    const baseItemPath = '../storage/docs/sinoe/'+ firstCredenciales.code_company +"/";
+
+    const url = 'https://casillas.pj.gob.pe/sinoe/login.xhtml';
+
+    // Borrar carpeta 
+    function eliminarCarpeta(ruta){
+        if (fs.existsSync(ruta)) {
+            fs.readdirSync(ruta).forEach((archivo, _) => {
+                const archivoRuta = path.join(ruta, archivo);
+                if (fs.lstatSync(archivoRuta).isDirectory()) {
+                eliminarCarpeta(archivoRuta);
+                } else {
+                fs.unlinkSync(archivoRuta);
+                }
+            });
+            fs.rmdirSync(ruta);
+        }
+    }
+
+    // Opten día actual
+    function getCurrentDate() {
+        let hoy = new Date();
+        let dia = hoy.getDate().toString().padStart(2, '0'); 
+        let mes = (hoy.getMonth() + 1).toString().padStart(2, '0'); 
+        let año = hoy.getFullYear();
+        return `${dia}/${mes}/${año}`;
+    }
+
+    // Retrocede 31 dias incluyendo el día actual
+    function goBackDays({currentDate, numberDays= 31, includeCurrentDate=true}){
+        let part = currentDate.split('/');
+        let day = parseInt(part[0]);
+        let month = parseInt(part[1]);
+        let year = parseInt(part[2]);
+
+        let fecha = new Date(year, month - 1, day);
+
+        if(includeCurrentDate){
+            fecha.setDate(fecha.getDate() - numberDays + 1);
+        }else{
+            fecha.setDate(fecha.getDate() - numberDays);
+        } 
+
+        let nuevoDia = fecha.getDate();
+        let nuevoMesRelativo = fecha.getMonth();  // 0 -11
+        let nuevoYear = fecha.getFullYear();
+
+        return {
+            "newDay": nuevoDia.toString(), 
+            "newMonthRelative": nuevoMesRelativo.toString(), 
+            "newYear": nuevoYear.toString()
+        };
+    }
+
+    // RPA --> calendario  
+    async function interactCalendar({page, newDate, filterFechaInput= 'fechaInicio'}){
+        
+        let results = {'status': null, 'msg':''};
+
+        try { 
+            
+            let filterFechaInputSelector;
+            if(filterFechaInput === 'fechaInicio'){
+                filterFechaInputSelector = '#frmHistorialDocumentos\\:fechaInicialPresentacion > button';
+            }else if(filterFechaInput === 'fechaFinal'){
+                filterFechaInputSelector = '#frmHistorialDocumentos\\:fechaFinalPresentacion_input > button';
+            }else{
+                throw new Error(`Error en la función [interactCalendar()]/ filterFechaInput no válido`);
+            }
+            
+            await page.waitForSelector(filterFechaInputSelector);
+            const fechaInputElement = await page.$(filterFechaInputSelector);
+            await fechaInputElement.click();
+
+            const panelCalenderSelector = '#ui-datepicker-div';
+            await page.waitForSelector(panelCalenderSelector);
+            const calendar = await page.$(panelCalenderSelector);
+            const calendarioVisible = await page.evaluate((calendar) => {
+                const estilos = window.getComputedStyle(calendar);
+                return estilos.display === 'block';
+            },calendar);
+
+            if (!calendarioVisible) {  
+                results.status = 404;
+                results.msg = `[interactCalendar()] No se puede abrir el panel de calendario ${filterFechaInput}`;
+                return results;
+            }
+
+            const {newDay, newMonthRelative, newYear} = newDate;
+
+            // Elegir año
+
+            let numIntentos = 0;
+            let yearfound = false;
+            const datepickerYear = '#ui-datepicker-div > div > div > select.ui-datepicker-year';
+
+            while(true){
+
+                await page.waitForSelector(datepickerYear);
+                let yearsOptions = await page.evaluate((datepickerYear) => {
+                    const select = document.querySelector(datepickerYear);
+                    const options = select.options;
+                    const result = {};
+                    for (let i = 0; i < options.length; i++) {
+                        const option = options[i];
+                        if (option.value) { result[option.textContent.trim()] = option.value; }
+                    }
+                    return result;
+                },datepickerYear);
+
+                if(!yearsOptions.hasOwnProperty(newYear)){ 
+                    let oldestYear = Object.keys(yearsOptions)[0];
+                    await page.select(datepickerYear, oldestYear);
+                    await new Promise(r => setTimeout(r, 500));
+                    numIntentos ++; 
+                }
+                else { 
+                    yearfound = true;
+                    break; 
+                }
+
+                if(numIntentos === 3) { break; }
+            }
+
+            if(!yearfound){
+                results.status = 404;
+                results.msg =  `Error: [interactCalendar()] El nuevo año obtenido ${newYear} no existe en el calendario`;
+                return results;
+            }
+            
+            await page.select(datepickerYear, newYear);
+            await new Promise(r => setTimeout(r, 500));
+
+            // Elegir mes
+
+            const datepickerMonth = '#ui-datepicker-div > div > div > select.ui-datepicker-month';
+            await page.waitForSelector(datepickerMonth);
+            const monthOptions = await page.evaluate((datepickerMonth) => {
+                const select = document.querySelector(datepickerMonth);
+                const options = select.options;
+                const result = [];
+                for (let i = 0; i < options.length; i++) {
+                    const option = options[i];
+                    if (option.value) { result.push(option.value); }
+                }
+                return result;
+            },datepickerMonth);
+            
+            if(!monthOptions.includes(newMonthRelative)){
+                results.status = 404;
+                results.msg =  `Error: [interactCalendar()] El nuevo mes[relat] obtenido ${newMonthRelative} no existe en el calendario`;
+                return results;
+            }
+
+            await page.select(datepickerMonth, newMonthRelative);
+            await new Promise(r => setTimeout(r, 500));
+
+            // Elegir el dia 
+
+            results = await page.evaluate((newDay, results)=>{
+                const tbodyTrCalendar = document.querySelectorAll('#ui-datepicker-div > table > tbody > tr');
+                for(let tr of tbodyTrCalendar){
+                    const tdElements = tr.querySelectorAll('td');
+                    for(let td of tdElements){
+                        const tagA = td.querySelector('a');
+                        if(tagA !== null){
+                            const textDay = tagA.textContent.trim();
+                            if(textDay === newDay){ 
+                                td.click(); 
+                                results.status = 200;
+                                break;
+                            }
+                        }
+                    }
+                    if(results.status === 200){ break; }
+                }
+                return results 
+            },newDay, results);
+
+            if(results.status !== 200){ throw new Error(`[interactCalendar()] Día no encontrado en el calendario ${filterFechaInput}`); }
+
+        }catch (error){
+            results.status = 404;
+            if (error.message === `[interactCalendar()] Día no encontrado en el calendario ${filterFechaInput}`){
+                error = error.message
+            }
+            results.msg = error;
+        }
+
+        return results
+    }
+
+    // Descarga un documento de anexo
+    async function downloadAnexos({page, nameButtonDownload, fechaHoraNotif, tipoDocumento}){
+        
+        try{
+            // Ruta para la descarga/lectura del documento (anexo)
+            const fechaOriginal = fechaHoraNotif;
+            const [fecha, hora] = fechaOriginal.split(' ');
+            const [dia, mes, year] = fecha.split('/');
+            const fechaFormateada = `${dia}-${mes}-${year}`;
+            const [horaParte, minutoParte, segundoParte] = hora.split(':');
+            const horaFormateada = `${horaParte}-${minutoParte}-${segundoParte}`;
+            const FechaHoraFormateada = `${fechaFormateada}-${horaFormateada}`;
+
+            const fullPathDir = `${baseDir}/${numExpediente.toUpperCase()}/historial/${tipoDocumento}-${FechaHoraFormateada}`;
+            fs.mkdirSync(fullPathDir, { recursive: true });
+
+            let itemPath = `${baseItemPath}/${numExpediente.toUpperCase()}/historial/${tipoDocumento}-${FechaHoraFormateada}`;
+
+            // Datos para el request
+    
+            const formElement = await page.$('#frmDialogArchivosDocumento');
+            const actionAttribute = await formElement.evaluate((element)=> element.getAttribute('action'));
+
+            //https://casillas.pj.gob.pe/sinoe/pages/casillas/notificaciones/notificacion-bandeja.xhtml
+            const url = `https://expedientes.pj.gob.pe${actionAttribute}`;
+            
+            const inputsNameValue = await formElement.evaluate((element)=>{
+                const inputsElements = element.querySelectorAll('input');
+                let inputsNameValue = []
+                for(let input of inputsElements){
+                    let name = input.getAttribute('name');
+                    let value = input.value;
+                    inputsNameValue.push({[name]: value});
+                }
+                return inputsNameValue
+            });
+            
+            let dataForm = {...inputsNameValue[0]};
+            dataForm = {...dataForm, [nameButtonDownload]:''};
+            dataForm = {...dataForm, ...inputsNameValue[1]};
+
+            let cookies = await page.cookies();
+            cookies = cookies.map(cookie => `${cookie.name}=${cookie.value}`).join('; ');
+
+            const RequestHeaders = {
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7',
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Cookie': cookies,
+                'Referer': 'https://expedientes.pj.gob.pe/mpe/pages/historial/consultar-historial.xhtml',
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
+            };
+
+            const response = await axios.post(url, dataForm, { headers: RequestHeaders, responseType: 'arraybuffer' });
+            
+            if(response.headers['content-type'].includes('application/pdf')){
+
+                const fileName = response.headers['content-disposition'].match(/filename="(.+)"/)[1];
+                let fullPath = `${fullPathDir}/${fileName}`
+
+                // Verifica si existe el archivo.pdf (aveces envia nombres iguales)
+                let idxRandom = 0; 
+                while(fs.existsSync(fullPath)){
+                    idxRandom++;
+                    fullPath = `${path.join(path.dirname(fullPath), path.basename(fullPath, '.pdf'))}-${idxRandom}.pdf`;
+                }
+                
+                fs.writeFileSync(fullPath, response.data);
+                return [`${itemPath}/${path.basename(fullPath)}`, fullPathDir]
+            }else{
+                return ["",""];
+            }
+        }catch(error){
+            throw new Error(`Error en la función [downloadAnexos()]/ ${error}`);
+        }
+
+    }
+
+    // Busca en la tabla
+    async function buscarExpedienteEnTabla({page}){
+
+        // Cantidad de filas 
+        await page.waitForSelector('#frmHistorialDocumentos\\:tblListHistorialEscrito_data');
+        const numRowsElements = await page.evaluate(()=>{
+            const rowsElements = document.querySelectorAll('#frmHistorialDocumentos\\:tblListHistorialEscrito_data > tr');
+            return rowsElements.length;
+        });
+
+        let result = {};
+        
+        // Iterar filas (Tabla de Registros)
+        for(let i=0; i < numRowsElements; i++){
+
+            // Una fila (Tabla de Registros)
+            let dataRow = await page.evaluate((i, numExpediente, fechaHoraDeReferencia, result)=>{
+                const templates = {
+                    "Registro":{"Cod. Expediente":'', "CII":'', "Nro. Escrito":'', "Distrito Judicial":'',
+                                "Órgano Jurisdiccional":'', "Tipo de Documento":'', "Fecha de Presentación": '', "Sumilla":''
+                            }
+                };
+
+            // Fecha inferior
+                function compareDate(dateStringRef, newDateString) {
+                    
+                let partes = dateStringRef.split('/');
+                let dia = parseInt(partes[0]);
+                let mes = parseInt(partes[1]);
+                let año = parseInt(partes[2]);
+            
+                const fechaRef = new Date(año, mes - 1, dia);
+            
+                partes = newDateString.split('/');
+                dia = parseInt(partes[0]);
+                mes = parseInt(partes[1]);
+                año = parseInt(partes[2]);
+            
+                const newFecha = new Date(año, mes - 1, dia);
+            
+                if(fechaRef > newFecha){   
+                    return true;   // fecha ingreada es menor
+                }else if(fechaRef < newFecha){
+                    return false;  // fecha ingreada es mayor
+                }else { 
+                    return null; // fecha ingreada es igual
+                }
+                }
+
+                function compararHoras(horaReferencia, otraHora) {
+                    const horaReferenciaArray = horaReferencia.split(':').map(Number);
+                    const otraHoraArray = otraHora.split(':').map(Number);
+                
+                    for (let i = 0; i < horaReferenciaArray.length; i++) {
+                    if (horaReferenciaArray[i] < otraHoraArray[i]) {
+                        return false;  // hora ingresada es superior
+                    } else if (horaReferenciaArray[i] > otraHoraArray[i]) {
+                        return true; // hora ingresada es inferior
+                    }
+                    }
+                    return null;  // horas ingresadas eson iguales
+                }
+
+                const rowsElements = document.querySelectorAll('#frmHistorialDocumentos\\:tblListHistorialEscrito_data > tr');
+                const columElements = rowsElements[i].querySelectorAll('td');
+
+                // Columna fecha de presentación
+                let fechaHora = columElements[columElements.length - 3].textContent.trim();
+                const fecha = fechaHora.split(' ')[0].trim();
+                const hora = fechaHora.split(' ')[1].trim();
+
+                // Fecha hora de referencia
+                const fechaRef = fechaHoraDeReferencia.split(' ')[0].trim();
+                const horaRef = fechaHoraDeReferencia.split(' ')[1].trim();
+
+                const compareDateResult = compareDate(fechaRef, fecha);
+                if(compareDateResult === true) {  // fecha inferior
+                    //     [result, break itr-filas, readArchivos]
+                    return [result, true, false];
+                }else if(compareDateResult === null){  // fecha iguales
+                    const compararHorasResult = compararHoras(horaRef, hora);
+                    if(compararHorasResult === true || compararHorasResult === null){  // hora inferior o igual
+                        return [result, true, false];
+                    }
+                }
+
+                // Columna N° de expediente
+                const textColumNumExpediente = columElements[1].textContent.trim();
+
+                if(textColumNumExpediente.toUpperCase() === numExpediente.toUpperCase()){
+
+                    const keyRx = `R_${Object.keys(result).length + 1}`;  // Último Rx del objeto
+                    result[keyRx] = {
+                        "Registro": {...templates.Registro},
+                        "Archivos":[]
+                    };
+
+                    const keysRegistro = Object.keys(templates.Registro);
+                    keysRegistro.forEach((key,index)=>{
+                        result[keyRx]["Registro"][key] = columElements[index + 1].textContent.trim();
+                    }); 
+
+                    // Abre panel de Archivos
+                    const buttonVerAnexos = columElements[columElements.length - 1].querySelector('button');
+                    buttonVerAnexos.click();
+
+                    //     [result, break itr-filas, readArchivos]
+                    return [result, false, true];
+                }
+
+                //     [result, break itr-filas, readArchivos]
+                return [result, false, false];
+
+            },i, numExpediente, fechaHoraPresentacion, result);
+
+
+            result = dataRow[0];
+
+            if(dataRow[1]) { break; } // "Break de filas"
+
+            // Panel anexos visible
+            if (dataRow[2]){
+                
+                await new Promise(r => setTimeout(r, 1000));
+
+                // Verificar que alert dialog [@] no esté visible
+                let alertDialogElement = await page.$('#j_idt163'); 
+                while (true){
+                    if (alertDialogElement !== null) {
+                        let estilo = await page.evaluate(elemento => elemento.style.display, alertDialogElement);
+                        if (estilo === 'none') { break; } 
+                        await new Promise(r => setTimeout(r, 100));
+                    }else{
+                        await new Promise(r => setTimeout(r, 5000));
+                        break;
+                    }   
+                }
+
+                let panelAnexos = await page.$('#frmDialogArchivosDocumento\\:dlgListaTerceros'); 
+                let estilo = await page.evaluate(elemento => elemento.style.display, panelAnexos);
+                
+                if (estilo === 'block') {
+
+                    // Tabla Archivos 
+                    result = await page.evaluate((result)=>{
+
+                        const templates = { "Archivos": {"Descripción":'', "Documento":''} };
+                        const keysResult = Object.keys(result);
+
+                        const rowsElements = document.querySelectorAll('#frmDialogArchivosDocumento\\:tblListaDocumentoDigital_data > tr');
+                        for(let row of rowsElements){
+                            let dataColum = {...templates.Archivos};
+                            let columElements = row.querySelectorAll('td');
+                            
+                            dataColum["Descripción"] = columElements[1].textContent.trim();
+                            let buttonDownloadElement = columElements[columElements.length -1].querySelector('button');
+                            let buttonDownloadName = buttonDownloadElement !== null? buttonDownloadElement.getAttribute('name'): "";
+                            dataColum["Documento"] = `${buttonDownloadName}`;
+
+                            result[keysResult[keysResult.length - 1]]["Archivos"].push(dataColum);
+                        }
+                        return result;
+                    }, result);
+
+                    // TABLA ARCHIVOS (Descarga de documentos - column final)
+                    
+                    let keysResult = Object.keys(result);
+                    let anexosLength = result[keysResult[keysResult.length - 1]]["Archivos"].length;
+                    let fechaHoraPresentDocumentos = result[keysResult[keysResult.length - 1]]["Registro"]["Fecha de Presentación"];
+                    let tipoDocumento = result[keysResult[keysResult.length - 1]]["Registro"]["Tipo de Documento"];
+
+                    for(let index=0; index < anexosLength; index++){
+                        let elementAnexoJson = result[keysResult[keysResult.length - 1]]["Archivos"][index];
+                        let documentName = elementAnexoJson["Documento"];
+                        let [fullItemPath, pathDownloadDoneTemp] = await downloadAnexos({
+                            page:page, nameButtonDownload: documentName, fechaHoraNotif:fechaHoraPresentDocumentos, tipoDocumento: tipoDocumento});
+                        
+                        result[keysResult[keysResult.length - 1]]["Archivos"][index]["Documento"] = fullItemPath;
+
+                        // Guarda las rutas a las notificaciones descargadas
+                        let pathDownloadDoneSet = new Set(pathDownloadDone);
+                        if (!pathDownloadDoneSet.has(pathDownloadDoneTemp)) {
+                            pathDownloadDoneSet.add(pathDownloadDoneTemp);
+                        }
+                        pathDownloadDone = Array.from(pathDownloadDoneSet);
+                    }
+
+                    let buttonCerrarPanelAnexos = await page.$('#frmDialogArchivosDocumento\\:j_idt139');
+                    await buttonCerrarPanelAnexos.click();
+                    await new Promise(r => setTimeout(r, 1000));
+                }
+            }
+        }
+
+        return result;
+        
+    }
+
+    // global
+    let pathDownloadDone = [];
+
+    (async () => {
+
+        let browser = null;
+        let page = null;
+        let results = {'status': null, 'msg':'', 'data':{}};
+    
+        try{
+    
+            // Verifica que exista la carpeta del expediente 
+            const pathDirVerifi = `${baseDir}/${numExpediente.toUpperCase()}`;
+            if(!fs.existsSync(pathDirVerifi)){
+                throw new Error(`No existe la carpeta del Expediente >> ${pathDirVerifi}`);
+            }
+    
+    
+            browser = await puppeteer.launch({
+                args: ["--no-sandbox", "--disable-setuid-sandbox"],
+                // headless: false
+                headless: 'new'
+            }); 
+            
+            page = await browser.newPage();
+            await page.setUserAgent('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36');
+            await page.goto(url);
+    
+            // ________________PAG. DE LOGIN_______________________________________________________
+    
+            try{
+                var imgCapchaSelector = '#frmLogin\\:imgCapcha';
+                await page.waitForSelector(imgCapchaSelector);
+               
+            } catch(error){
+                results.status = 404;
+                results.msg =  `[Error en la pag. de login] ${error}`;
+                await browser.close();
+                return results;
+            }
+    
+            // Ingresa credenciales 
+    
+            const loginPageUserSelector = '#frmLogin > div.cuadro.bradio > app-root > div > div > div:nth-child(1) > div > input'
+            await page.waitForSelector(loginPageUserSelector);
+            await page.type(loginPageUserSelector, user, { delay: 100 });
+    
+            const loginPagePassSelector = '#frmLogin > div.cuadro.bradio > app-root > div > div > div:nth-child(3) > div > input'
+            await page.waitForSelector(loginPagePassSelector);
+            await page.type(loginPagePassSelector, password, {delay: 100});
+            
+            // Resolver captcha
+    
+            const imgCapcha = await page.$(imgCapchaSelector);
+            const captchaBuffer = await imgCapcha.screenshot();
+            const captcha = captchaBuffer.toString('base64');
+            //fs.writeFileSync('captura.png', captchaBuffer);
+            ac.setAPIKey(process.env.APIKEYANTICAPTCHA);
+            //Specify softId to earn 10% commission with your app.
+            //Get your softId here: https://anti-captcha.com/clients/tools/devcenter
+            ac.setSoftId(0);
+            
+            let text = '';
+            try{
+                text = await ac.solveImage(captcha, true);
+            }catch(e){
+                results.status = 404;
+                results.msg = `[No se puedo resolver captcha] ${error}`;
+                await browser.close();
+                return results;
+            }
+            
+            const inputTextCaptcha = '#frmLogin\\:captcha';
+            await page.waitForSelector(inputTextCaptcha);
+            await page.type(inputTextCaptcha, text, { delay: 100 });
+            await new Promise(r => setTimeout(r, 500));
+    
+            const buscar = await page.$('#frmLogin\\:btnIngresar');
+            await buscar.click();
+            await new Promise(r => setTimeout(r, 1000));
+    
+    
+            // ________________PAG. SIGUIENTE [?]_______________________________________________________
+            
+            // Detección de otra sesión activa o Casilla Electrónica
+            // Nota: no tiene autorizado cerrar las sesiones
+    
+            const finalizarSesiones = new Promise((resolve, reject) => {
+                page.waitForSelector('#j_idt9\\:btnSalir')
+                  .then(() => { resolve('Sesiones activas'); })
+                  .catch((error) => { reject(error); });
+                });
+            
+            const casillaElectronica = new Promise((resolve, reject) => {
+                page.waitForSelector('#frmNuevo\\:j_idt38 > div > img')
+                    .then(() => { resolve('Casilla electronica'); })
+                    .catch((error) => { reject(error); });
+                });
+    
+            try {
+                const result = await Promise.race([finalizarSesiones,casillaElectronica]);
+                if (result === 'Sesiones activas') {
+                    results.status = 200;
+                    results.msg = 'Se ha detectado que cuenta con una SESIÓN ACTIVA.';
+                    await browser.close();
+                    return results;
+                } else if (result !== 'Casilla electronica') {
+                    results.status = 404;
+                    results.msg = 'No se pudo pasar la pag. de login';
+                    await browser.close();
+                    return results;
+                }
+            } catch(error) {  // timeout
+                results.status = 404;
+                results.msg = `[No se pudo pasar la pag. de login] ${error}`;
+                await browser.close();
+                return results;
+            }
+            
+            //______________PAG. DE BIENVENIDA - SERVICIOS ELECTRÓNICOS EN LÍNEA________________________
+            
+            // Ingresar a Mesa de Partes Electrónica
+    
+            const MPESelector = '#frmNuevo\\:j_idt41';
+            await page.waitForSelector(MPESelector);
+            const buttonMPE = await page.$(MPESelector);
+            await buttonMPE.click();
+            
+            try{
+                await page.waitForNavigation({waitUntil: 'load'});
+            } catch(error){
+                results.status = 404;
+                results.msg = `[No se pudo ingresar a Mesa de Partes Electónica] ${error}`;  
+    
+                await page.waitForSelector('#frmNuevo\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmNuevo\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+                await browser.close();
+                return results;
+            }
+    
+            //________________PAG. MESA DE PARTES ELECTRÓNICAS_______________________________________________________
+    
+            // Ingresar a historial
+            let historialSelector = '#frmMenu\\:menuPrincipal > ul > li:nth-child(4) > a';
+            await page.waitForSelector(historialSelector);
+            await page.hover(historialSelector);
+            await new Promise(r => setTimeout(r, 500));
+    
+            historialSelector = '#frmMenu\\:menuPrincipal > ul > li.ui-widget.ui-menuitem.ui-corner-all.ui-menu-parent.ui-menuitem-active > ul > li > a';
+            const historial = await page.$(historialSelector);
+            await historial.click();
+            
+            try{
+                await page.waitForNavigation({waitUntil: 'load'}); 
+            } catch(error){
+                results.status = 404;
+                results.msg = `[No se pudo ingresar a Historial de Mesa de Partes Electónica] ${error}`;  
+    
+                await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+    
+                await browser.close();
+                return results;
+            }
+    
+            // Ingresar datos 
+    
+            const buttonBuscarSelector = '#frmHistorialDocumentos\\:btnBuscarHistorial';
+            await page.waitForSelector(buttonBuscarSelector);
+            
+            const tipoDePresentacionSelector = '#frmHistorialDocumentos\\:presentacion';
+            await page.waitForSelector(tipoDePresentacionSelector);
+            await page.select(tipoDePresentacionSelector, "1");  // Elige solo Escrito
+            await new Promise(r => setTimeout(r, 500));
+    
+            const nroExpedienteSelector = '#frmHistorialDocumentos\\:nroExpediente';
+            await page.waitForSelector(nroExpedienteSelector);
+            const digitosExpediente = numExpediente.split('-');
+            const nroExpediente = `${digitosExpediente[0]}-${digitosExpediente[1]}`;
+            await page.type(nroExpedienteSelector, nroExpediente, { delay: 100 });
+            await new Promise(r => setTimeout(r, 500));
+    
+            // Fecha de hoy o ultimo
+            let startDateOrLast = getCurrentDate();
+            // Fecha 7 dias atrás
+            let newDate = goBackDays({currentDate: startDateOrLast, numberDays: 7});
+            
+            // Elegir fecha inicial 
+    
+            let resultsInteractCalendar = await interactCalendar({page: page, newDate: newDate});
+            await new Promise(r => setTimeout(r, 500));
+    
+            if(resultsInteractCalendar.status === 404){
+                results.status = 404;
+                results.msg = resultsInteractCalendar.msg;
+    
+                await page.waitForSelector('#frmMenu\\:clCerrarSession');
+                const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+                await buttonCerrarSesion.click();
+                await page.waitForSelector(imgCapchaSelector);
+    
+                await browser.close();
+                return results;
+            }
+    
+            // Botón buscar 
+    
+            await page.waitForSelector(buttonBuscarSelector);
+            let buttonBuscar = await page.$(buttonBuscarSelector);
+            await buttonBuscar.click();
+            await new Promise(r => setTimeout(r, 500));
+    
+            // Verificar que alert dialog [@] no esté visible
+    
+            let alertDialogElement = await page.$('#j_idt163'); 
+            while (true){
+                if (alertDialogElement !== null) {
+                    let estilo = await page.evaluate(elemento => elemento.style.display, alertDialogElement);
+                    if (estilo === 'none') { break; } 
+                    await new Promise(r => setTimeout(r, 100));
+                }else{
+                    await new Promise(r => setTimeout(r, 5000));
+                    break;
+                }   
+            }
+    
+            // Elegir el máximo valor en la paginación 
+            
+            await page.waitForSelector('#frmHistorialDocumentos\\:tblListHistorialEscrito\\:j_id10');
+            let paginatorOptions = await page.evaluate(() => {
+                const select = document.querySelector('#frmHistorialDocumentos\\:tblListHistorialEscrito\\:j_id10');
+                const options = select.options;
+                const result = [];
+                for (let i = 0; i < options.length; i++) {
+                    const option = options[i];
+                    if (option.value) { result.push(option.value); }
+                }
+                return result;
+            });
+            
+            let paginatorOptionsInt = paginatorOptions.map( numeroStr => parseInt(numeroStr));
+            let maxValue = Math.max(...paginatorOptionsInt);
+    
+            await page.select('#frmHistorialDocumentos\\:tblListHistorialEscrito\\:j_id10', maxValue.toString());
+            await new Promise(r => setTimeout(r, 500));
+    
+            // Se asume que resultado más reciente estan en las primeras filas
+            const dataPartialResult = await buscarExpedienteEnTabla({page: page});
+    
+            results.status = 200;
+            results.data['numResults'] = Object.keys(dataPartialResult).length;
+            results.data['resultados'] = dataPartialResult;
+    
+            await page.waitForSelector('#frmMenu\\:clCerrarSession');
+            const buttonCerrarSesion = await page.$('#frmMenu\\:clCerrarSession');
+            await buttonCerrarSesion.click();
+            await page.waitForSelector(imgCapchaSelector);
+            await browser.close();
+            
+            return results;  
+    
+        }catch(error){
+            results.status = 404;
+            results.msg = `[General] ${error}`;
+    
+            if(browser !== null){
+    
+                const cerrarSesionPagBienvenida = new Promise((resolve, reject) => {
+                    page.waitForSelector('#frmNuevo\\:clCerrarSession')
+                      .then(() => { resolve({"selector": '#frmNuevo\\:clCerrarSession'}); })
+                      .catch((error) => { reject({"error": error}); });
+                    });
+                
+                const cerrarSesionCasillasElectronicas = new Promise((resolve, reject) => {
+                    page.waitForSelector('#frmMenu\\:clCerrarSession')
+                        .then(() => { resolve({"selector": '#frmMenu\\:clCerrarSession'}); })
+                        .catch((error) => { reject({"error": error}); });
+                    });
+    
+                try {
+                    const result = await Promise.race([cerrarSesionPagBienvenida,cerrarSesionCasillasElectronicas]);
+                    const resultKey = Object.keys(result)[0];
+                    if (resultKey === 'selector') {
+                        if(result[resultKey].includes('#frmMenu')){
+                            // Verificar si el panel anexos esta visible
+                            let panelAnexos = await page.$('#frmDialogArchivosDocumento\\:dlgListaTerceros'); 
+                            let estilo = await page.evaluate(elemento => elemento.style.display, panelAnexos);
+                            if (estilo === 'block'){
+                                let buttonCerrarPanelAnexos = await page.$('#frmDialogArchivosDocumento\\:j_idt139');
+                                await buttonCerrarPanelAnexos.click();
+                                await new Promise(r => setTimeout(r, 1000));
+                            }
+                        }
+                        const buttonCerrarSesion = await page.$(result[resultKey]);
+                        await buttonCerrarSesion.click();
+                        await page.waitForSelector('#frmLogin\\:imgCapcha');
+                        await browser.close();
+                    } 
+                } catch(error) {  // timeout
+                    await browser.close();
+                }   
+            }
+    
+            // Borrar la carpeta del Escrito creado
+            if(pathDownloadDone.length > 0){
+                pathDownloadDone.forEach(path =>{
+                    eliminarCarpeta(path);
+                });  
+            }
+    
+            return results;
+        }
+    })().then((results) => {
+        res.send(results);
+        console.log('Respuesta del RPA en Sinoe Historial');
+        // console.log(JSON.stringify(results, null, 1)); 
+    })
+    .catch((error) => {
+        console.error("Ocurrió un error:", error);
+        res.send({'status': 404})
+    });
+
+});
 
 
 // ? Reporte de Actualización de datos
@@ -3268,7 +5704,7 @@ app.post("/poder-judicial-update-data", (req, res) => {
     })
     .catch((error) => {
         console.error("Ocurrió un error:", error);
-        error.sendStatus(500);
+        res.send({'status': 404})
     });
 });
 
@@ -3288,7 +5724,14 @@ app.post("/error", (req, res) => {
 // httpsServer.listen(app.get("port"), () => {
 //     console.log('app running on port', app.get("port"));
 // });
-// LOCAL 
-app.listen(app.get("port"), /* "192.30.241.7", */ () => 
-    console.log("app running on port", app.get("port"))
-);
+
+// // LOCAL 
+// app.listen(app.get("port"), /* "192.30.241.7", */ () => 
+//     console.log("app running on port", app.get("port"))
+// );
+
+// LOCAL 2
+const httpsServer = https.createServer(httpsOptions, app);
+httpsServer.listen(app.get("port"), () => {
+    console.log('app running on port', app.get("port"));
+});
