@@ -15,7 +15,7 @@ if (process.env.NODE_ENV != 'production'){
 
 
 // var urlAPI = "http://127.0.0.1:9101";
-var urlAPI = process.env.URL_API_RPA;
+var urlAPI = process.env.URL_API_RPA || "https://rpa.temisperu.com:8083";
 
 
 // Configura los transportes (destinos) de registro
@@ -24,7 +24,8 @@ const logger = winston.createLogger({
     format: winston.format.simple(), // Formato de registro simple
     transports: [
       new winston.transports.Console(), // Registra en la consola
-      new winston.transports.File({ filename: 'logs/alert_judicial.log' }) // Registra en un archivo
+    //   new winston.transports.File({ filename: 'logs/alert_judicial.log' }) // Registra en un archivo
+      new winston.transports.File({ filename: '/home/temisperu/public_html/rpa.temisperu.com/RPA/logs/alert_judicial.log' }) // Registra en un archivo
     ],
 });
 
@@ -185,6 +186,7 @@ async function actualizarRegistroExpedientes(conexion, data, firstExp) {
 
 async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
     console.log('El objeto no está vacío.');
+    console.log('🚗', data);
     const idsNotify = [];
     const dataNewSeguimientoTemp = data.data['Segimiento del expediente'];
     // const dataNewSeguimientoTemp =  {
@@ -242,7 +244,7 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
 
                 var notifyName = noti;
                 var notifyDestinatario = notificacionesData["Destinatario"];
-                const fechaFormateada = moment(notificacionesData["Fecha de envio"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
+                var fechaFormateada = moment(notificacionesData["Fecha de envio"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
                 var notifyFechaEnvio = fechaFormateada;
                 var notifyAnexo = notificacionesData["Anexo(s)"];
                 var notifyformaEntrega = notificacionesData['Forma de entrega'];

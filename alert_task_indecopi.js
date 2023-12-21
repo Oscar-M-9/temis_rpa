@@ -11,7 +11,7 @@ if (process.env.NODE_ENV != 'production'){
     require('dotenv').config();
 }
 
-var urlAPI = process.env.URL_API_RPA;
+var urlAPI = process.env.URL_API_RPA || "https://rpa.temisperu.com:8083";
 
 
 // Configura los transportes (destinos) de registro
@@ -19,7 +19,8 @@ const logger = winston.createLogger({
     level: 'error',
     transports: [
         new winston.transports.File({
-            filename: 'logs/alert_task_indecopi.log',
+            // filename: 'logs/alert_task_indecopi.log',
+            filename: '/home/temisperu/public_html/rpa.temisperu.com/RPA/logs/alert_task_indecopi.log',
             level: 'info',
         }),
         new winston.transports.Console({
