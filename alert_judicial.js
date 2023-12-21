@@ -186,7 +186,6 @@ async function actualizarRegistroExpedientes(conexion, data, firstExp) {
 
 async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
     console.log('El objeto no está vacío.');
-    console.log('🚗', data);
     const idsNotify = [];
     const dataNewSeguimientoTemp = data.data['Segimiento del expediente'];
     // const dataNewSeguimientoTemp =  {
@@ -383,7 +382,7 @@ async function procesarMovimientoPendiente(conexion, idMoviPending, dataPendingS
                 // Realiza las inserciones necesarias en notificacion_seguimientos
                 const notifyName = noti;
                 const notifyDestinatario = notificacionesData["Destinatario"];
-                const fechaFormateada = moment(notificacionesData["Fecha de envío"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
+                const fechaFormateada = moment(notificacionesData["Fecha de envio"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
                 const notifyFechaEnvio = fechaFormateada;
                 const notifyAnexo = notificacionesData["Anexo(s)"];
                 const notifyFormaEntrega = notificacionesData['Forma de entrega'];
