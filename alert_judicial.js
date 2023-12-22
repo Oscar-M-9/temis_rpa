@@ -244,9 +244,11 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                 var notifyName = noti;
                 var notifyDestinatario = notificacionesData["Destinatario"];
                 var fechaFormateada = moment(notificacionesData["Fecha de envio"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
-                var notifyFechaEnvio = fechaFormateada;
+                var notifyFechaEnvio = fechaFormateada ? fechaFormateada : null;
                 var notifyAnexo = notificacionesData["Anexo(s)"];
                 var notifyformaEntrega = notificacionesData['Forma de entrega'];
+                var msgLog = "1-- fecha formateada " + fechaFormateada + ' fecha de envio '+ notificacionesData["Fecha de envio"] + '[notificaciones]'+ JSON.stringify(notificacionesData);
+                logger.info(msgLog);
 
                 const sqlInsertFollowUp = 'INSERT INTO notificacion_seguimientos (name, destinatario, fecha_envio, anexos, forma_entrega, abog_virtual, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?)';
 
@@ -383,9 +385,12 @@ async function procesarMovimientoPendiente(conexion, idMoviPending, dataPendingS
                 const notifyName = noti;
                 const notifyDestinatario = notificacionesData["Destinatario"];
                 const fechaFormateada = moment(notificacionesData["Fecha de envio"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
-                const notifyFechaEnvio = fechaFormateada;
+                const notifyFechaEnvio = fechaFormateada ? fechaFormateada : null;
                 const notifyAnexo = notificacionesData["Anexo(s)"];
                 const notifyFormaEntrega = notificacionesData['Forma de entrega'];
+
+                var msgLog = "2-- fecha formateada " + fechaFormateada + ' fecha de envio '+ notificacionesData["Fecha de envio"] + '[notificaciones]'+ JSON.stringify(notificacionesData);
+                logger.info(msgLog);
             
                 const sqlInsertFollowUp = 'INSERT INTO notificacion_seguimientos (name, destinatario, fecha_envio, anexos, forma_entrega, abog_virtual, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?)';
             
