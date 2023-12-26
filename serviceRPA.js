@@ -23,17 +23,17 @@ const conectarBaseDeDatos = require('./helpers/conexion');
 if (process.env.NODE_ENV != 'production'){
     require('dotenv').config();
 }
-// LOCAL 
-const httpsOptions = {
-    cert: fs.readFileSync('D:/INGYTAL/ABOGADOS/RPA/cert.crt', 'utf8'),
-    key: fs.readFileSync('D:/INGYTAL/ABOGADOS/RPA/cert.key', 'utf8'),
-};
-// // PRODUCTION 
+// // LOCAL 
 // const httpsOptions = {
-//     key: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.key', 'utf8'),
-//     cert: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.crt', 'utf8'),
-//     ca: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.pem', 'utf8')
+//     cert: fs.readFileSync('D:/INGYTAL/ABOGADOS/RPA/cert.crt', 'utf8'),
+//     key: fs.readFileSync('D:/INGYTAL/ABOGADOS/RPA/cert.key', 'utf8'),
 // };
+// PRODUCTION 
+const httpsOptions = {
+    key: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.key', 'utf8'),
+    cert: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.crt', 'utf8'),
+    ca: fs.readFileSync('/home/temisperu/public_html/rpa.temisperu.com/cert.pem', 'utf8')
+};
 
 
 
@@ -55,13 +55,13 @@ app.use((req, res, next) => {
 app.use(express.json());
 
 
-// LOCAL 
-const dirGeneral = 'D:/GitHub/Ingytal-Temis/storage/app/public/docs/';
-const dirGeneralSinoe = 'D:/GitHub/Ingytal-Temis/storage/app/public/docs/sinoe';
+// // LOCAL 
+// const dirGeneral = 'D:/GitHub/Ingytal-Temis/storage/app/public/docs/';
+// const dirGeneralSinoe = 'D:/GitHub/Ingytal-Temis/storage/app/public/docs/sinoe';
 
-// // PRODUCTION 
-// const dirGeneral = '/home/temisperu/public_html/_wildcard_.temisperu.com/storage/app/public/docs/';
-// const dirGeneralSinoe = '/home/temisperu/public_html/_wildcard_.temisperu.com/storage/app/public/docs/sinoe';
+// PRODUCTION 
+const dirGeneral = '/home/temisperu/public_html/_wildcard_.temisperu.com/storage/app/public/docs/';
+const dirGeneralSinoe = '/home/temisperu/public_html/_wildcard_.temisperu.com/storage/app/public/docs/sinoe';
 
 app.post("/poder-judicial-result", (req, res) => {
     let body_filtros = req.body;
@@ -1867,7 +1867,7 @@ app.post("/supremo-data", (req, res) => {
     })().then((results) => {
         res.send(results);
         console.log('Respuesta del RPA en Corte suprema data');
-        // console.log(JSON.stringify(results, null, 1)); 
+        console.log(JSON.stringify(results, null, 1)); 
 
     })
     .catch((error) => {
@@ -3292,8 +3292,8 @@ app.post("/sinoe-update-data", async (req, res) => {
     
             browser = await puppeteer.launch({
                 args: ["--no-sandbox", "--disable-setuid-sandbox"],
-                headless: false
-                // headless: 'new'
+                // headless: false
+                headless: 'new'
             }); 
             
             page = await browser.newPage();
@@ -4065,8 +4065,8 @@ app.post("/sinoe-historial-data", async (req, res) => {
     
             browser = await puppeteer.launch({
                 args: ["--no-sandbox", "--disable-setuid-sandbox"],
-                headless: false
-                // headless: 'new'
+                // headless: false
+                headless: 'new'
             }); 
             
             page = await browser.newPage();
@@ -5720,10 +5720,10 @@ app.post("/error", (req, res) => {
 // });
 
 // PRODUCTION 
-// const httpsServer = https.createServer(httpsOptions, app);
-// httpsServer.listen(app.get("port"), () => {
-//     console.log('app running on port', app.get("port"));
-// });
+const httpsServer = https.createServer(httpsOptions, app);
+httpsServer.listen(app.get("port"), () => {
+    console.log('app running on port', app.get("port"));
+});
 
 // // LOCAL 
 // app.listen(app.get("port"), /* "192.30.241.7", */ () => 
@@ -5731,7 +5731,7 @@ app.post("/error", (req, res) => {
 // );
 
 // LOCAL 2
-const httpsServer = https.createServer(httpsOptions, app);
-httpsServer.listen(app.get("port"), () => {
-    console.log('app running on port', app.get("port"));
-});
+// const httpsServer = https.createServer(httpsOptions, app);
+// httpsServer.listen(app.get("port"), () => {
+//     console.log('app running on port', app.get("port"));
+// });
