@@ -235,6 +235,19 @@ async function procesarAccionPendiente(conexion, dataPendingAccion, firstExp, ke
             
             // Agrega el ID generado al arreglo global idsAccionRealizada
             idsAccionRealizada.push(insertResult.insertId);
+            const fechaHoraActual = moment().format('YYYY-MM-DD HH:mm:ss');
+            const sqlInsertHistoryMovements = 'INSERT INTO history_movements (id_movimiento, id_exp, id_client, entidad, estado, code_company, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)';
+            // 6
+            const valuesHistoryMovements = [
+                insertResult.insertId,
+                firstExp.id,
+                firstExp.id_client,
+                "indecopi",
+                'no',
+                firstExp.code_company,
+                fechaHoraActual
+            ];
+            await ejecutarQueryInsertAccionRealizada(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
             
         }
     } catch (error) {
@@ -275,7 +288,7 @@ async function obtenerUserParte(conexion, id) {
 // Crear una función para obtener registro de user_partes
 async function obtenerAccionesNuevas(conexion, id, count) {
     return new Promise((resolve, reject) => {
-        conexion.query('SELECT * FROM acciones_indecopis WHERE id_indecopi = ? AND n_accion > ? AND abog_virtual = ? ORDER BY n_accion DESC', [id, count, 'si'], (error, results) => {
+        conexion.query('SELECT * FROM acciones_indecopis WHERE id_indecopi = ? AND n_accion >= ? AND abog_virtual = ? ORDER BY n_accion DESC', [id, count, 'si'], (error, results) => {
             if (error) {
                 reject(error);
             } else if (results.length === 0) {
@@ -311,7 +324,7 @@ async function main() {
 
         if (!firstRecord) {
             // throw new Error('No se obtuvo datos de la tabla temporal');
-            const fechaYHora = new Date().toUTCString();
+            const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
             console.log('No hay registros en la tabla temporal.');
             strMsg = fechaYHora + ' No hay registros en la tabla temporal.';
             logger.warn(strMsg);
@@ -357,7 +370,7 @@ async function main() {
 
                 const resultEmails = await obtenerUserParte(conexion, firstExp.id);
                 if (!resultEmails){
-                    const fechaYHora = new Date().toUTCString();
+                    const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
                     strMsg = fechaYHora + ' No se encontró correos en el expediente (' + firstExp.id + ') : ' + resultEmails
                     logger.error(strMsg);
                     // await eliminarTempRegistro(conexion, firstRecord.id);
@@ -667,7 +680,7 @@ async function main() {
     
                     // Envía el correo electrónico
                     await transporter.sendMail(mailOptions, (error, info) => {
-                        const fechaYHora = new Date().toUTCString();
+                        const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
                         if (error) {
                             console.error('Error al enviar el correo electrónico:', error);
                             strMsg = fechaYHora, ' Error al enviar el correo electrónico:', error;
@@ -694,7 +707,7 @@ async function main() {
 
         conexion.end();
     } catch (error) {
-        const fechaYHora = new Date().toUTCString();
+        const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
         console.error('Error:', error);
         strMsg = fechaYHora + ' Error:' + error;
         logger.error(strMsg)

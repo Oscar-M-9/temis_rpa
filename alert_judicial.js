@@ -291,7 +291,22 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                     firstExp.id
                 ];
         
-                await ejecutarQueryInsertFollowUp(conexion, sqlInsertFollowUp, values);
+                const insertResult = await ejecutarQueryInsertFollowUp(conexion, sqlInsertFollowUp, values);
+
+                const fechaHoraActual = moment().format('YYYY-MM-DD HH:mm:ss');
+                const sqlInsertHistoryMovements = 'INSERT INTO history_movements (id_movimiento, id_exp, id_client, entidad, estado, code_company, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)';
+                // 6
+                const valuesHistoryMovements = [
+                    insertResult.insertId,
+                    firstExp.id,
+                    firstExp.id_client,
+                    "judicial",
+                    'no',
+                    firstExp.code_company,
+                    fechaHoraActual
+                ];
+                await ejecutarQueryInsertFollowUp(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
+
             }else{
                 const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:ii").format("YYYY-MM-DD HH:ii:ss");
                 var newFechaIngreso = fechaFormateada;
@@ -317,10 +332,109 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                     firstExp.id
                 ];
         
-                await ejecutarQueryInsertFollowUp(conexion, sqlInsertFollowUp, values);
+                const insertResult = await ejecutarQueryInsertFollowUp(conexion, sqlInsertFollowUp, values);
+
+                const fechaHoraActual = moment().format('YYYY-MM-DD HH:mm:ss');
+                const sqlInsertHistoryMovements = 'INSERT INTO history_movements (id_movimiento, id_exp, id_client, entidad, estado, code_company, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)';
+                // 6
+                const valuesHistoryMovements = [
+                    insertResult.insertId,
+                    firstExp.id,
+                    firstExp.id_client,
+                    "judicial",
+                    'no',
+                    firstExp.code_company,
+                    fechaHoraActual
+                ];
+                await ejecutarQueryInsertFollowUp(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
+
             }
         } else {
             console.log('Notificaciones vacias');
+            if (seguimientoData["Fecha de Resolución"]){
+                const fechaFormateada = moment(seguimientoData["Fecha de Resolución"], "DD/MM/YYYY").format("YYYY-MM-DD");
+                var newFechaResolucion = fechaFormateada;
+                var newFojas = seguimientoData["Fojas"];
+        
+                const sqlInsertFollowUp = 'INSERT INTO follow_ups (n_seguimiento, fecha_resolucion, resolucion, type_notificacion, acto, fojas, proveido, obs_sumilla, descripcion, file, noti, abog_virtual, code_company, code_user, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        
+                const values = [
+                    nMovimiento,
+                    newFechaResolucion,
+                    newResolucion,
+                    newTipoNotificacion,
+                    newActo,
+                    newFojas,
+                    newProveido,
+                    newSumilla,
+                    newDescripcion,
+                    newFile,
+                    null,
+                    newAbogVirtual,
+                    firstExp.code_company,
+                    firstExp.code_user,
+                    firstExp.id
+                ];
+        
+                const insertResult = await ejecutarQueryInsertFollowUp(conexion, sqlInsertFollowUp, values);
+
+                const fechaHoraActual = moment().format('YYYY-MM-DD HH:mm:ss');
+                const sqlInsertHistoryMovements = 'INSERT INTO history_movements (id_movimiento, id_exp, id_client, entidad, estado, code_company, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)';
+                // 6
+                const valuesHistoryMovements = [
+                    insertResult.insertId,
+                    firstExp.id,
+                    firstExp.id_client,
+                    "judicial",
+                    'no',
+                    firstExp.code_company,
+                    fechaHoraActual
+                ];
+                await ejecutarQueryInsertFollowUp(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
+
+            }else{
+                const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:ii").format("YYYY-MM-DD HH:ii:ss");
+                var newFechaIngreso = fechaFormateada;
+                var newFolios = seguimientoData["Folios"];
+        
+                const sqlInsertFollowUp = 'INSERT INTO follow_ups (n_seguimiento, fecha_ingreso, resolucion, type_notificacion, acto, folios, proveido, obs_sumilla, descripcion, file, noti, abog_virtual, code_company, code_user, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        
+                const values = [
+                    nMovimiento,
+                    newFechaIngreso,
+                    newResolucion,
+                    newTipoNotificacion,
+                    newActo,
+                    newFolios,
+                    newProveido,
+                    newSumilla,
+                    newDescripcion,
+                    newFile,
+                    null,
+                    newAbogVirtual,
+                    firstExp.code_company,
+                    firstExp.code_user,
+                    firstExp.id
+                ];
+        
+                const insertResult = await ejecutarQueryInsertFollowUp(conexion, sqlInsertFollowUp, values);
+                console.log()
+
+                const fechaHoraActual = moment().format('YYYY-MM-DD HH:mm:ss');
+                const sqlInsertHistoryMovements = 'INSERT INTO history_movements (id_movimiento, id_exp, id_client, entidad, estado, code_company, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)';
+                // 6
+                const valuesHistoryMovements = [
+                    insertResult.insertId,
+                    firstExp.id,
+                    firstExp.id_client,
+                    "judicial",
+                    'no',
+                    firstExp.code_company,
+                    fechaHoraActual
+                ];
+                await ejecutarQueryInsertFollowUp(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
+
+            }
         }
 
         nMovimiento++;
@@ -337,7 +451,7 @@ async function ejecutarQueryInsertFollowUp(conexion, sql, values) {
 
             const insertId = results.insertId;
             console.log('Nuevo registro insertado con éxito (Follow up). ID:', insertId);
-            resolve();
+            resolve({ insertId });
         });
     });
 }
@@ -506,7 +620,7 @@ async function main() {
         const firstRecord = await obtenerPrimerRegistro(conexion);
 
         if (!firstRecord) {
-            const fechaYHora = new Date().toUTCString();
+            const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
             console.log('No hay registros en la tabla temporal.');
             strMsg = fechaYHora + ' No hay registros en la tabla temporal.';
             logger.warn(strMsg);
@@ -572,7 +686,7 @@ async function main() {
             const resultEmails = await obtenerUserParte(conexion, firstExp.id);
 
             if (!resultEmails){
-                const fechaYHora = new Date().toUTCString();
+                const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
                 strMsg = fechaYHora + ' No se encontró correos en el expediente (' + firstExp.id + ') : ' + resultEmails
                 logger.error(strMsg);
                 await eliminarTempRegistro(conexion, firstRecord.id);
@@ -959,7 +1073,7 @@ async function main() {
 
                 // Envía el correo electrónico
                 await transporter.sendMail(mailOptions, (error, info) => {
-                    const fechaYHora = new Date().toUTCString();
+                    const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
                     if (error) {
                         console.error('Error al enviar el correo electrónico:', error);
                         strMsg = fechaYHora + ' Error al enviar el correo electrónico:' + error;
@@ -979,7 +1093,7 @@ async function main() {
 
         conexion.end();
     } catch (error) {
-        const fechaYHora = new Date().toUTCString();
+        const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
         console.error('Error:', error);
         strMsg = fechaYHora + ' Error:' + error;
         logger.error(strMsg);

@@ -242,7 +242,7 @@ async function main() {
 
         if (!firstRecord) {
             // throw new Error('No se obtuvo datos de la tabla temporal');
-            const fechaYHora = new Date().toUTCString();
+            const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
             console.log('No hay registros en la tabla temporal.');
             strMsg = fechaYHora + ': No hay registros en la tabla temporal.';
             logger.warn(strMsg);
@@ -325,7 +325,22 @@ async function main() {
                             const fechaMConvert = moment(fechaM, 'DD/MM/YYYY').format('YYYY-MM-DD');
 
                             const dataInsertM = [ncountTotalMovi++, fechaMConvert, element["txtActo"], element["txtResolucion"], element["numFojas"], element["txtSumillaSeg"], element["xDescUsuario"], element["presentante"], "si", firstExp.code_company, firstExp.code_user, firstExp.id];
-                            await ejecutarQueryInsert(conexion, sqlInsertM, dataInsertM);
+                            const insertResult = await ejecutarQueryInsert(conexion, sqlInsertM, dataInsertM);
+
+                            const fechaHoraActual = moment().format('YYYY-MM-DD HH:mm:ss');
+                            const sqlInsertHistoryMovements = 'INSERT INTO history_movements (id_movimiento, id_exp, id_client, entidad, estado, code_company, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)';
+                            // 6
+                            const valuesHistoryMovements = [
+                                insertResult.insertId,
+                                firstExp.id,
+                                firstExp.id_client,
+                                "suprema",
+                                'no',
+                                firstExp.code_company,
+                                fechaHoraActual
+                            ];
+                            await ejecutarQueryInsert(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
+
                         }
                     }
                     intCountM++;
@@ -335,7 +350,7 @@ async function main() {
                 // NOTIFICAR POR CORREO
                 const resultEmails = await obtenerUserParte(conexion, firstExp.id);
                 if (!resultEmails){
-                    const fechaYHora = new Date().toUTCString();
+                    const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
                     strMsg = fechaYHora + ': No se encontró correos en el expediente (' + firstExp.id + ') : '+ resultEmails;
                     logger.error(strMsg);
                     conexion.end();
@@ -642,7 +657,7 @@ async function main() {
         
                         // Envía el correo electrónico
                         await transporter.sendMail(mailOptions, (error, info) => {
-                            const fechaYHora = new Date().toUTCString();
+                            const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
                             if (error) {
                                 console.error('Error al enviar el correo electrónico:', error);
                                 strMsg = fechaYHora +': Error al enviar el correo electrónico:' + error;
@@ -669,7 +684,7 @@ async function main() {
 
         conexion.end();
     } catch (error) {
-        const fechaYHora = new Date().toUTCString();
+        const fechaYHora = moment().format('YYYY-MM-DD HH:mm:ss');
         console.error('Error:', error);
         var strMsg = fechaYHora + ' Error:' + error;
         logger.error(strMsg)
