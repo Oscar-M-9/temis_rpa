@@ -359,6 +359,11 @@ async function main() {
         // Obtener firstExp aquí, por ejemplo:
         const firstExp = await obtenerRegistroExpedientes(conexion, firstRecord.id_exp);
         console.log("🍕",firstExp);
+        const fechaYHoraW = moment().format('YYYY-MM-DD HH:mm:ss');
+        strMsg = fechaYHoraW + "firstExp: " + JSON.stringify(firstExp);
+        strMsg2 = fechaYHoraW + "firstRecord: " + JSON.stringify(firstRecord);
+        logger.warn(strMsg);
+        logger.warn(strMsg2);
         
         if (firstExp) {
             const firstClient = await obtenerRegistroClientes(conexion, firstExp.id_client);

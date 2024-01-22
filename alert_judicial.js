@@ -308,7 +308,7 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                 await ejecutarQueryInsertFollowUp(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
 
             }else{
-                const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:ii").format("YYYY-MM-DD HH:ii:ss");
+                const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
                 var newFechaIngreso = fechaFormateada;
                 var newFolios = seguimientoData["Folios"];
         
@@ -393,7 +393,7 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                 await ejecutarQueryInsertFollowUp(conexion, sqlInsertHistoryMovements, valuesHistoryMovements);
 
             }else{
-                const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:ii").format("YYYY-MM-DD HH:ii:ss");
+                const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
                 var newFechaIngreso = fechaFormateada;
                 var newFolios = seguimientoData["Folios"];
         
