@@ -225,6 +225,9 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
         var newResolucion = seguimientoData["Resolución"];
         var newTipoNotificacion = seguimientoData["Tipo de Notificación"];
         const fechaProveido = moment(seguimientoData["Proveido"], "DD/MM/YYYY").format("YYYY-MM-DD");
+        const fechaYHoraW = moment().format('YYYY-MM-DD HH:mm:ss');
+        strMsg = fechaYHoraW + "seguimientoData Proveido: " + seguimientoData["Proveido"]  + fechaProveido;
+        logger.warn(strMsg);
         var newProveido = fechaProveido;
         var newSumilla = seguimientoData["Sumilla"];
         var newDescripcion = seguimientoData["Descripción de Usuario"];
