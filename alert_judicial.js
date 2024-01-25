@@ -273,6 +273,10 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                 const fechaFormateada = moment(seguimientoData["Fecha de Resolución"], "DD/MM/YYYY").format("YYYY-MM-DD");
                 var newFechaResolucion = fechaFormateada;
                 var newFojas = seguimientoData["Fojas"];
+
+                if (newFojas == ""){
+                    newFojas = null;
+                }
         
                 const sqlInsertFollowUp = 'INSERT INTO follow_ups (n_seguimiento, fecha_resolucion, resolucion, type_notificacion, acto, fojas, proveido, obs_sumilla, descripcion, file, noti, abog_virtual, code_company, code_user, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
         
@@ -314,6 +318,9 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                 const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
                 var newFechaIngreso = fechaFormateada;
                 var newFolios = seguimientoData["Folios"];
+                if (newFolios == ""){
+                    newFolios = null;
+                }
         
                 const sqlInsertFollowUp = 'INSERT INTO follow_ups (n_seguimiento, fecha_ingreso, resolucion, type_notificacion, acto, folios, proveido, obs_sumilla, descripcion, file, noti, abog_virtual, code_company, code_user, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
         
@@ -358,7 +365,9 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                 const fechaFormateada = moment(seguimientoData["Fecha de Resolución"], "DD/MM/YYYY").format("YYYY-MM-DD");
                 var newFechaResolucion = fechaFormateada;
                 var newFojas = seguimientoData["Fojas"];
-        
+                if (newFojas == ""){
+                    newFojas = null;
+                }
                 const sqlInsertFollowUp = 'INSERT INTO follow_ups (n_seguimiento, fecha_resolucion, resolucion, type_notificacion, acto, fojas, proveido, obs_sumilla, descripcion, file, noti, abog_virtual, code_company, code_user, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
         
                 const values = [
@@ -399,6 +408,9 @@ async function insertarMovimientoNuevo(conexion, data, firstExp, firstRecord) {
                 const fechaFormateada = moment(seguimientoData["Fecha de Ingreso"], "DD/MM/YYYY HH:mm").format("YYYY-MM-DD HH:mm:ss");
                 var newFechaIngreso = fechaFormateada;
                 var newFolios = seguimientoData["Folios"];
+                if (newFolios == ""){
+                    newFolios = null;
+                }
         
                 const sqlInsertFollowUp = 'INSERT INTO follow_ups (n_seguimiento, fecha_ingreso, resolucion, type_notificacion, acto, folios, proveido, obs_sumilla, descripcion, file, noti, abog_virtual, code_company, code_user, id_exp) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
         
